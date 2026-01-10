@@ -1,16 +1,19 @@
-from flask import Flask, jsonify # type: ignore
-from flask_cors import CORS # type: ignore
+"""
+Application entry point
+"""
+import os
+from app import create_app
 
-app = Flask(__name__)
-CORS(app)
+# Get environment from environment variable or default to development
+config_name = os.environ.get('FLASK_ENV', 'development')
 
-@app.route('/')
-def home():
-    return jsonify({"message": "Backend is running!"})
-
-@app.route('/api/test')
-def test():
-    return jsonify({"status": "OK", "message": "Backend API is working"})
+# Create Flask application
+app = create_app(config_name)
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    # Run development server
+    app.run(
+        host='0.0.0.0',
+        port=int(os.environ.get('PORT', 5000)),
+        debug=app.config.get('DEBUG', False)
+    )

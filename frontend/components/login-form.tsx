@@ -1,19 +1,23 @@
 "use client"
 
-import type React from "react"
-
-import { useState } from "react"
+import React, { useState } from "react"
 import { useRouter } from "next/navigation"
+import { useAuth } from "@/contexts/AuthContext"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
-import { Eye, EyeOff, Loader2, Mail, Lock } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Eye, EyeOff, Loader2, Mail, Lock, AlertCircle } from "lucide-react"
 
 export function LoginForm() {
   const router = useRouter()
+  const { login } = useAuth()
+  
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string>("")
+  
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -21,17 +25,55 @@ export function LoginForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError("")
     setIsLoading(true)
-    // Simulate login - replace with actual auth logic
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-    setIsLoading(false)
-    router.push("/dashboard")
+
+    try {
+      // Validate form data
+      if (!formData.email || !formData.password) {
+        setError("Please fill in all fields")
+        return
+      }
+
+      // Call login through auth context
+      await login({
+        email: formData.email,
+        password: formData.password,
+      })
+
+      // Redirect to dashboard on success
+      router.push("/dashboard")
+      
+    } catch (err) {
+      // Handle error from API
+      const errorMessage = err instanceof Error ? err.message : "Login failed. Please try again."
+      setError(errorMessage)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleInputChange = (field: 'email' | 'password') => (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    setFormData({ ...formData, [field]: e.target.value })
+    // Clear error when user starts typing
+    if (error) setError("")
   }
 
   return (
     <Card className="bg-card/80 backdrop-blur-sm border-border">
-      <form onSubmit={handleSubmit}>
+      <div>
         <CardContent className="space-y-4 pt-6">
+          {/* Error Alert */}
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {/* Email Field */}
           <div className="space-y-2">
             <Label htmlFor="email" className="text-foreground">
               Email
@@ -44,18 +86,26 @@ export function LoginForm() {
                 placeholder="you@example.com"
                 className="pl-10 bg-secondary border-border"
                 value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                onChange={handleInputChange('email')}
+                disabled={isLoading}
                 required
+                autoComplete="email"
               />
             </div>
           </div>
 
+          {/* Password Field */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="password" className="text-foreground">
                 Password
               </Label>
-              <Button variant="link" className="p-0 h-auto text-xs text-primary" type="button">
+              <Button 
+                variant="link" 
+                className="p-0 h-auto text-xs text-primary" 
+                type="button"
+                disabled={isLoading}
+              >
                 Forgot password?
               </Button>
             </div>
@@ -67,8 +117,10 @@ export function LoginForm() {
                 placeholder="••••••••"
                 className="pl-10 pr-10 bg-secondary border-border"
                 value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                onChange={handleInputChange('password')}
+                disabled={isLoading}
                 required
+                autoComplete="current-password"
               />
               <Button
                 type="button"
@@ -76,20 +128,27 @@ export function LoginForm() {
                 size="icon"
                 className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
                 onClick={() => setShowPassword(!showPassword)}
+                disabled={isLoading}
               >
                 {showPassword ? (
                   <EyeOff className="w-4 h-4 text-muted-foreground" />
                 ) : (
                   <Eye className="w-4 h-4 text-muted-foreground" />
                 )}
-                <span className="sr-only">{showPassword ? "Hide password" : "Show password"}</span>
+                <span className="sr-only">
+                  {showPassword ? "Hide password" : "Show password"}
+                </span>
               </Button>
             </div>
           </div>
         </CardContent>
 
         <CardFooter>
-          <Button type="submit" className="w-full bg-primary hover:bg-primary/90" disabled={isLoading}>
+          <Button 
+            type="submit" 
+            className="w-full bg-primary hover:bg-primary/90" 
+            disabled={isLoading}
+          >
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -100,7 +159,7 @@ export function LoginForm() {
             )}
           </Button>
         </CardFooter>
-      </form>
+      </div>
     </Card>
   )
 }
