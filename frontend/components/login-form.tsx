@@ -13,59 +13,44 @@ import { Eye, EyeOff, Loader2, Mail, Lock, AlertCircle } from "lucide-react"
 export function LoginForm() {
   const router = useRouter()
   const { login } = useAuth()
-  
+
   const [showPassword, setShowPassword] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string>("")
-  
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
-  })
+  const [isLoading,    setIsLoading]    = useState(false)
+  const [error,        setError]        = useState<string>("")
+
+  const [formData, setFormData] = useState({ email: "", password: "" })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
+
+    if (!formData.email || !formData.password) {
+      setError("Please fill in all fields")
+      return
+    }
+
     setIsLoading(true)
-
     try {
-      // Validate form data
-      if (!formData.email || !formData.password) {
-        setError("Please fill in all fields")
-        return
-      }
-
-      // Call login through auth context
-      await login({
-        email: formData.email,
-        password: formData.password,
-      })
-
-      // Redirect to dashboard on success
+      await login({ email: formData.email, password: formData.password })
       router.push("/dashboard")
-      
     } catch (err) {
-      // Handle error from API
-      const errorMessage = err instanceof Error ? err.message : "Login failed. Please try again."
-      setError(errorMessage)
+      setError(err instanceof Error ? err.message : "Login failed. Please try again.")
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleInputChange = (field: 'email' | 'password') => (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    setFormData({ ...formData, [field]: e.target.value })
-    // Clear error when user starts typing
-    if (error) setError("")
-  }
+  const handleInputChange = (field: "email" | "password") =>
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setFormData({ ...formData, [field]: e.target.value })
+      if (error) setError("")
+    }
 
   return (
     <Card className="bg-card/80 backdrop-blur-sm border-border">
-      <div>
+      {/* ✅ form tag wraps content + footer so submit button works */}
+      <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4 pt-6">
-          {/* Error Alert */}
           {error && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
@@ -73,11 +58,9 @@ export function LoginForm() {
             </Alert>
           )}
 
-          {/* Email Field */}
+          {/* Email */}
           <div className="space-y-2">
-            <Label htmlFor="email" className="text-foreground">
-              Email
-            </Label>
+            <Label htmlFor="email" className="text-foreground">Email</Label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
@@ -86,7 +69,7 @@ export function LoginForm() {
                 placeholder="you@example.com"
                 className="pl-10 bg-secondary border-border"
                 value={formData.email}
-                onChange={handleInputChange('email')}
+                onChange={handleInputChange("email")}
                 disabled={isLoading}
                 required
                 autoComplete="email"
@@ -94,15 +77,13 @@ export function LoginForm() {
             </div>
           </div>
 
-          {/* Password Field */}
+          {/* Password */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label htmlFor="password" className="text-foreground">
-                Password
-              </Label>
-              <Button 
-                variant="link" 
-                className="p-0 h-auto text-xs text-primary" 
+              <Label htmlFor="password" className="text-foreground">Password</Label>
+              <Button
+                variant="link"
+                className="p-0 h-auto text-xs text-primary"
                 type="button"
                 disabled={isLoading}
               >
@@ -117,7 +98,7 @@ export function LoginForm() {
                 placeholder="••••••••"
                 className="pl-10 pr-10 bg-secondary border-border"
                 value={formData.password}
-                onChange={handleInputChange('password')}
+                onChange={handleInputChange("password")}
                 disabled={isLoading}
                 required
                 autoComplete="current-password"
@@ -130,36 +111,27 @@ export function LoginForm() {
                 onClick={() => setShowPassword(!showPassword)}
                 disabled={isLoading}
               >
-                {showPassword ? (
-                  <EyeOff className="w-4 h-4 text-muted-foreground" />
-                ) : (
-                  <Eye className="w-4 h-4 text-muted-foreground" />
-                )}
-                <span className="sr-only">
-                  {showPassword ? "Hide password" : "Show password"}
-                </span>
+                {showPassword
+                  ? <EyeOff className="w-4 h-4 text-muted-foreground" />
+                  : <Eye    className="w-4 h-4 text-muted-foreground" />}
+                <span className="sr-only">{showPassword ? "Hide" : "Show"} password</span>
               </Button>
             </div>
           </div>
         </CardContent>
 
         <CardFooter>
-          <Button 
-            type="submit" 
-            className="w-full bg-primary hover:bg-primary/90" 
+          <Button
+            type="submit"
+            className="w-full bg-primary hover:bg-primary/90"
             disabled={isLoading}
           >
             {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Signing in...
-              </>
-            ) : (
-              "Sign In"
-            )}
+              <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Signing in...</>
+            ) : "Sign In"}
           </Button>
         </CardFooter>
-      </div>
+      </form>
     </Card>
   )
 }

@@ -1,66 +1,24 @@
-"""
-Flask application configuration
-"""
 import os
 from datetime import timedelta
+from dotenv import load_dotenv
+
+load_dotenv()   # loads your .env file automatically
+
 
 class Config:
-    """Base configuration"""
-    # Secret key for JWT encoding (MUST be changed in production)
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
-    
-    # SQLAlchemy settings
+    # ── Flask ────────────────────────────────────────────────────────────────
+    SECRET_KEY = os.environ.get("SECRET_KEY", "change-me-in-production")
+    DEBUG      = os.environ.get("FLASK_DEBUG", "True") == "True"
+
+    # ── Database ─────────────────────────────────────────────────────────────
+    # Default: SQLite (zero setup). Change DATABASE_URL in .env for PostgreSQL.
+    SQLALCHEMY_DATABASE_URI     = os.environ.get("DATABASE_URL", "sqlite:///astrology.db")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    SQLALCHEMY_ECHO = False
-    
-    # Frontend URL for CORS
-    FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
-    
-    # Session configuration
-    PERMANENT_SESSION_LIFETIME = timedelta(hours=24)
 
+    # ── JWT ──────────────────────────────────────────────────────────────────
+    JWT_SECRET_KEY            = os.environ.get("JWT_SECRET_KEY", "change-jwt-secret-in-production")
+    JWT_ACCESS_TOKEN_EXPIRES  = timedelta(hours=1)
+    JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
 
-class DevelopmentConfig(Config):
-    """Development configuration"""
-    DEBUG = True
-    TESTING = False
-    
-    # PostgreSQL database URL for development
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
-        'postgresql://postgres:ojasbhi@localhost:5432/flask_auth_dev'
-
-
-class ProductionConfig(Config):
-    """Production configuration"""
-    DEBUG = False
-    TESTING = False
-    
-    # PostgreSQL database URL from environment variable (required in production)
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
-    
-    # Enforce HTTPS
-    SESSION_COOKIE_SECURE = True
-    SESSION_COOKIE_HTTPONLY = True
-    SESSION_COOKIE_SAMESITE = 'Lax'
-    
-    if not SQLALCHEMY_DATABASE_URI:
-        raise ValueError('DATABASE_URL environment variable must be set in production')
-
-
-class TestingConfig(Config):
-    """Testing configuration"""
-    DEBUG = True
-    TESTING = True
-    
-    # Use separate test database
-    SQLALCHEMY_DATABASE_URI = os.environ.get('TEST_DATABASE_URL') or \
-        'postgresql://postgres:ojasbhi@localhost:5432/flask_auth_test'
-
-
-# Configuration dictionary
-config = {
-    'development': DevelopmentConfig,
-    'production': ProductionConfig,
-    'testing': TestingConfig,
-    'default': DevelopmentConfig
-}
+    # ── CORS ─────────────────────────────────────────────────────────────────
+    CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:3000").split(",")

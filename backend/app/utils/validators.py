@@ -1,63 +1,35 @@
-"""
-Input validation utilities for email and password
-"""
 import re
 
-def validate_email(email):
-    """
-    Validate email format using regex
-    
-    Args:
-        email (str): Email address to validate
-    
-    Returns:
-        bool: True if valid, False otherwise
-    """
-    if not email:
-        return False
-    
-    # RFC 5322 simplified email regex
-    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    
-    return re.match(pattern, email) is not None
+
+def validate_email(email: str) -> bool:
+    pattern = r"^[\w\.\+\-]+@[\w\.-]+\.\w{2,}$"
+    return bool(re.match(pattern, email))
 
 
-def validate_password(password):
-    """
-    Validate password strength
-    
-    Requirements:
-    - Minimum 8 characters
-    - At least one uppercase letter
-    - At least one lowercase letter
-    - At least one number
-    - At least one special character
-    
-    Args:
-        password (str): Password to validate
-    
-    Returns:
-        tuple: (bool, str) - (is_valid, error_message)
-    """
-    if not password:
-        return False, 'Password is required'
-    
+def validate_password(password: str) -> tuple[bool, str]:
     if len(password) < 8:
-        return False, 'Password must be at least 8 characters long'
-    
-    if len(password) > 128:
-        return False, 'Password must not exceed 128 characters'
-    
-    if not re.search(r'[a-z]', password):
-        return False, 'Password must contain at least one lowercase letter'
-    
-    if not re.search(r'[A-Z]', password):
-        return False, 'Password must contain at least one uppercase letter'
-    
-    if not re.search(r'\d', password):
-        return False, 'Password must contain at least one number'
-    
-    if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
-        return False, 'Password must contain at least one special character'
-    
-    return True, None
+        return False, "Password must be at least 8 characters long"
+    if not re.search(r"[A-Za-z]", password):
+        return False, "Password must contain at least one letter"
+    if not re.search(r"\d", password):
+        return False, "Password must contain at least one number"
+    return True, ""
+
+
+def validate_signup_payload(data: dict) -> tuple[bool, str]:
+    full_name = (data.get("full_name") or "").strip()
+    email     = (data.get("email")     or "").strip()
+    password  = (data.get("password")  or "")
+
+    if not full_name or not email or not password:
+        return False, "Full name, email, and password are required"
+    if len(full_name) < 2:
+        return False, "Full name must be at least 2 characters"
+    if not validate_email(email):
+        return False, "Please enter a valid email address"
+
+    valid_pw, pw_msg = validate_password(password)
+    if not valid_pw:
+        return False, pw_msg
+
+    return True, ""

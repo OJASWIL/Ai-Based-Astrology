@@ -2,6 +2,7 @@ import type React from "react"
 import type { Metadata, Viewport } from "next"
 import { Space_Grotesk, Noto_Sans_Devanagari } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
+import { AuthProvider } from "@/contexts/AuthContext"
 import "./globals.css"
 
 const spaceGrotesk = Space_Grotesk({
@@ -23,18 +24,9 @@ export const metadata: Metadata = {
   generator: "v0.app",
   icons: {
     icon: [
-      {
-        url: "/icon-light-32x32.png",
-        media: "(prefers-color-scheme: light)",
-      },
-      {
-        url: "/icon-dark-32x32.png",
-        media: "(prefers-color-scheme: dark)",
-      },
-      {
-        url: "/icon.svg",
-        type: "image/svg+xml",
-      },
+      { url: "/icon-light-32x32.png", media: "(prefers-color-scheme: light)" },
+      { url: "/icon-dark-32x32.png",  media: "(prefers-color-scheme: dark)"  },
+      { url: "/icon.svg", type: "image/svg+xml" },
     ],
     apple: "/apple-icon.png",
   },
@@ -48,13 +40,14 @@ export const viewport: Viewport = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className="dark">
       <body className={`${spaceGrotesk.variable} ${notoSansDevanagari.variable} font-sans antialiased`}>
-        {children}
+        {/* AuthProvider wraps everything so useAuth() works on any page */}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
         <Analytics />
       </body>
     </html>
