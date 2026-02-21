@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from datetime import datetime
+from werkzeug.security import generate_password_hash
 
 from app.models.user import User
 from app.utils.validators import validate_signup_payload
@@ -25,25 +25,13 @@ def signup():
     if User.find_by_email(email):
         return jsonify({"error": "An account with this email already exists"}), 409
 
-    # Parse date of birth
-    date_of_birth = None
-    if data.get("date_of_birth"):
-        try:
-            date_of_birth = datetime.strptime(data["date_of_birth"], "%Y-%m-%d").date()
-        except ValueError:
-            pass
-
     # Hash password
-    from werkzeug.security import generate_password_hash
     password_hash = generate_password_hash(data["password"])
 
     user = User.create(
-        full_name      = data["full_name"].strip(),
-        email          = email,
-        password_hash  = password_hash,
-        date_of_birth  = date_of_birth,
-        time_of_birth  = data.get("time_of_birth")  or None,
-        place_of_birth = data.get("place_of_birth") or None,
+        full_name     = data["full_name"].strip(),
+        email         = email,
+        password_hash = password_hash,
     )
 
     tokens = generate_tokens(user.id)
