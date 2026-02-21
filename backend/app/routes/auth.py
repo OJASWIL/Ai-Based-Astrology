@@ -2,21 +2,19 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
 
-from app import db
 from app.models.user import User
-from app.utils.validators import validate_signup_payload, validate_email
+from app.utils.validators import validate_signup_payload
 from app.utils.token import generate_tokens, get_current_user_id
 
 auth_bp = Blueprint("auth", __name__)
 
 
-# ─── SIGNUP ──────────────────────────────────────────────────────────────────
+# ─── SIGNUP ───────────────────────────────────────────────────────────────────
 
 @auth_bp.route("/signup", methods=["POST"])
 def signup():
     data = request.get_json(silent=True) or {}
 
-    # Validate
     valid, msg = validate_signup_payload(data)
     if not valid:
         return jsonify({"error": msg}), 400
@@ -24,36 +22,32 @@ def signup():
     email = data["email"].strip().lower()
 
     # Duplicate check
-    if User.query.filter_by(email=email).first():
+    if User.find_by_email(email):
         return jsonify({"error": "An account with this email already exists"}), 409
 
-    # Build user
-    user = User(
-        full_name=data["full_name"].strip(),
-        email=email,
-    )
-    user.set_password(data["password"])
-
-    # Optional astrology fields
+    # Parse date of birth
+    date_of_birth = None
     if data.get("date_of_birth"):
         try:
-            user.date_of_birth = datetime.strptime(data["date_of_birth"], "%Y-%m-%d").date()
+            date_of_birth = datetime.strptime(data["date_of_birth"], "%Y-%m-%d").date()
         except ValueError:
-            pass   # silently ignore bad date format
+            pass
 
-    user.time_of_birth  = data.get("time_of_birth")  or None
-    user.place_of_birth = data.get("place_of_birth") or None
+    # Hash password
+    from werkzeug.security import generate_password_hash
+    password_hash = generate_password_hash(data["password"])
 
-    db.session.add(user)
-    db.session.commit()
+    user = User.create(
+        full_name      = data["full_name"].strip(),
+        email          = email,
+        password_hash  = password_hash,
+        date_of_birth  = date_of_birth,
+        time_of_birth  = data.get("time_of_birth")  or None,
+        place_of_birth = data.get("place_of_birth") or None,
+    )
 
     tokens = generate_tokens(user.id)
-
-    return jsonify({
-        "message": "Account created successfully",
-        "user":    user.to_dict(),
-        **tokens,
-    }), 201
+    return jsonify({"message": "Account created successfully", "user": user.to_dict(), **tokens}), 201
 
 
 # ─── LOGIN ────────────────────────────────────────────────────────────────────
@@ -67,7 +61,7 @@ def login():
     if not email or not password:
         return jsonify({"error": "Email and password are required"}), 400
 
-    user = User.query.filter_by(email=email).first()
+    user = User.find_by_email(email)
 
     if not user or not user.check_password(password):
         return jsonify({"error": "Invalid email or password"}), 401
@@ -75,16 +69,10 @@ def login():
     if not user.is_active:
         return jsonify({"error": "Your account has been deactivated. Contact support."}), 403
 
-    user.last_login = datetime.utcnow()
-    db.session.commit()
+    user.update_last_login()
 
     tokens = generate_tokens(user.id)
-
-    return jsonify({
-        "message": "Login successful",
-        "user":    user.to_dict(),
-        **tokens,
-    }), 200
+    return jsonify({"message": "Login successful", "user": user.to_dict(), **tokens}), 200
 
 
 # ─── GET CURRENT USER ─────────────────────────────────────────────────────────
@@ -93,7 +81,7 @@ def login():
 @jwt_required()
 def me():
     user_id = get_current_user_id()
-    user    = User.query.get(user_id)
+    user    = User.find_by_id(user_id)
 
     if not user or not user.is_active:
         return jsonify({"error": "User not found"}), 404
@@ -101,7 +89,7 @@ def me():
     return jsonify({"user": user.to_dict()}), 200
 
 
-# ─── REFRESH ─────────────────────────────────────────────────────────────────
+# ─── REFRESH ──────────────────────────────────────────────────────────────────
 
 @auth_bp.route("/refresh", methods=["POST"])
 @jwt_required(refresh=True)
@@ -111,11 +99,9 @@ def refresh():
     return jsonify({"access_token": access_token}), 200
 
 
-# ─── LOGOUT ──────────────────────────────────────────────────────────────────
+# ─── LOGOUT ───────────────────────────────────────────────────────────────────
 
 @auth_bp.route("/logout", methods=["POST"])
 @jwt_required()
 def logout():
-    # JWT is stateless – client must delete tokens.
-    # Add a blocklist here if you need server-side invalidation.
     return jsonify({"message": "Logged out successfully"}), 200

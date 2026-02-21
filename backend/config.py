@@ -10,13 +10,15 @@ class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "change-me-in-production")
     DEBUG      = os.environ.get("FLASK_DEBUG", "True") == "True"
 
-    # ── Database ─────────────────────────────────────────────────────────────
-    # Default: SQLite (zero setup). Change DATABASE_URL in .env for PostgreSQL.
-    SQLALCHEMY_DATABASE_URI     = os.environ.get("DATABASE_URL", "sqlite:///astrology.db")
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # PostgreSQL connection settings
+    DB_HOST     = os.environ.get("DB_HOST", "localhost")
+    DB_PORT     = os.environ.get("DB_PORT", "5432")
+    DB_NAME     = os.environ.get("DB_NAME", "astrology_db")
+    DB_USER     = os.environ.get("DB_USER", "postgres")
+    DB_PASSWORD = os.environ.get("DB_PASSWORD", "password")
 
-    # ── JWT ──────────────────────────────────────────────────────────────────
-    JWT_SECRET_KEY            = os.environ.get("JWT_SECRET_KEY", "change-jwt-secret-in-production")
+    # JWT
+    JWT_SECRET_KEY            = os.environ.get("JWT_SECRET_KEY", "change-jwt-secret")
     JWT_ACCESS_TOKEN_EXPIRES  = timedelta(hours=1)
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
 

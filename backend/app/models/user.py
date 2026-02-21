@@ -1,27 +1,20 @@
-from app import db
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
+from app.db import get_db
 
 
-class User(db.Model):
-    __tablename__ = "users"
+class User:
+    def __init__(self, row: dict):
+        self.id             = row["id"]
+        self.full_name      = row["full_name"]
+        self.email          = row["email"]
+        self.password_hash  = row["password_hash"]
+        self.is_active      = row["is_active"]
+        self.created_at     = row["created_at"]
+        self.updated_at     = row["updated_at"]
+        self.last_login     = row["last_login"]
 
-    id            = db.Column(db.Integer, primary_key=True)
-    full_name     = db.Column(db.String(100), nullable=False)
-    email         = db.Column(db.String(150), unique=True, nullable=False, index=True)
-    password_hash = db.Column(db.String(255), nullable=False)
-
-    # Astrology-specific (optional at signup)
-    date_of_birth  = db.Column(db.Date,        nullable=True)
-    time_of_birth  = db.Column(db.String(10),  nullable=True)   # "HH:MM"
-    place_of_birth = db.Column(db.String(200), nullable=True)
-
-    is_active  = db.Column(db.Boolean,  default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    last_login = db.Column(db.DateTime, nullable=True)
-
-    # ── helpers ──────────────────────────────────────────────────────────────
+    # ── Password ──────────────────────────────────────────────────────────────
 
     def set_password(self, password: str):
         self.password_hash = generate_password_hash(password)
@@ -29,17 +22,63 @@ class User(db.Model):
     def check_password(self, password: str) -> bool:
         return check_password_hash(self.password_hash, password)
 
+    # ── Serializer ────────────────────────────────────────────────────────────
+
     def to_dict(self):
         return {
-            "id":             self.id,
-            "full_name":      self.full_name,
-            "email":          self.email,
-            "date_of_birth":  self.date_of_birth.isoformat()  if self.date_of_birth  else None,
-            "time_of_birth":  self.time_of_birth,
-            "place_of_birth": self.place_of_birth,
-            "created_at":     self.created_at.isoformat(),
-            "last_login":     self.last_login.isoformat()      if self.last_login     else None,
+            "id":         self.id,
+            "full_name":  self.full_name,
+            "email":      self.email,
+            "is_active":  self.is_active,
+            "created_at": self.created_at.isoformat(),
+            "last_login": self.last_login.isoformat() if self.last_login else None,
         }
 
     def __repr__(self):
         return f"<User {self.email}>"
+
+    # ── Queries ───────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def find_by_email(email: str):
+        conn = get_db()
+        cur  = conn.cursor()
+        cur.execute("SELECT * FROM users WHERE email = %s", (email,))
+        row  = cur.fetchone()
+        cur.close()
+        return User(row) if row else None
+
+    @staticmethod
+    def find_by_id(user_id: int):
+        conn = get_db()
+        cur  = conn.cursor()
+        cur.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+        row  = cur.fetchone()
+        cur.close()
+        return User(row) if row else None
+
+    @staticmethod
+    def create(full_name: str, email: str, password_hash: str):
+        conn = get_db()
+        cur  = conn.cursor()
+        cur.execute("""
+            INSERT INTO users (full_name, email, password_hash)
+            VALUES (%s, %s, %s)
+            RETURNING *
+        """, (full_name, email, password_hash))
+        row = cur.fetchone()
+        conn.commit()
+        cur.close()
+        return User(row)
+
+    def update_last_login(self):
+        conn = get_db()
+        cur  = conn.cursor()
+        cur.execute(
+            "UPDATE users SET last_login = %s WHERE id = %s RETURNING last_login",
+            (datetime.utcnow(), self.id)
+        )
+        row = cur.fetchone()
+        conn.commit()
+        cur.close()
+        self.last_login = row["last_login"]
