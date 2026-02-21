@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { KundaliChart } from "@/components/kundali-chart"
 import { Download, Share2, Sun, Moon, Star, Sparkles } from "lucide-react"
 import Link from "next/link"
+import { AuthGuard } from "@/components/auth-guard"
 
 // Sample data - In real app, this would come from API
 const kundaliData = {
@@ -53,6 +54,7 @@ const planetaryPositions = [
 
 export default function JanmaKundaliPage() {
   return (
+    <AuthGuard>
     <DashboardLayout title="Janma Kundali">
       <div className="space-y-6">
         {/* Header */}
@@ -280,5 +282,6 @@ export default function JanmaKundaliPage() {
         </Tabs>
       </div>
     </DashboardLayout>
+    </AuthGuard>
   )
 }

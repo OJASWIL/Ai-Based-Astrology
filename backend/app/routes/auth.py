@@ -26,12 +26,12 @@ def signup():
         return jsonify({"error": "An account with this email already exists"}), 409
 
     # Hash password
-    password_hash = generate_password_hash(data["password"])
+    password = generate_password_hash(data["password"])
 
     user = User.create(
         full_name     = data["full_name"].strip(),
         email         = email,
-        password_hash = password_hash,
+        password = password,
     )
 
     tokens = generate_tokens(user.id)

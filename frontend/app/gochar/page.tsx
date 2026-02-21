@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { KundaliChart } from "@/components/kundali-chart"
 import { Moon, Calendar, ArrowRight, AlertTriangle, CheckCircle, Info } from "lucide-react"
 import Link from "next/link"
+import { AuthGuard } from "@/components/auth-guard"
 
 // Sample Gochar data
 const currentTransits = [
@@ -71,6 +72,7 @@ const upcomingTransits = [
 
 export default function GocharPage() {
   return (
+    <AuthGuard>
     <DashboardLayout title="Gochar Analysis">
       <div className="space-y-6">
         {/* Header */}
@@ -176,5 +178,6 @@ export default function GocharPage() {
         </Card>
       </div>
     </DashboardLayout>
+    </AuthGuard>
   )
 }

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Calendar, Star, Heart, Briefcase, Coins, Activity, TrendingUp, Sparkles } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { AuthGuard } from "@/components/auth-guard"
 
 const rashis = [
   { name: "मेष", english: "Aries", symbol: "♈", element: "Fire", color: "#ef4444" },
@@ -94,6 +95,7 @@ export default function HoroscopePage() {
   const currentHoroscope = horoscopeData[selectedRashi.name] || defaultHoroscope
 
   return (
+    <AuthGuard>
     <DashboardLayout title="Daily Horoscope">
       <div className="space-y-6">
         {/* Header */}
@@ -293,5 +295,6 @@ export default function HoroscopePage() {
         </Tabs>
       </div>
     </DashboardLayout>
+    </AuthGuard>
   )
 }

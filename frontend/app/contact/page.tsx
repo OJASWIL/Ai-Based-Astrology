@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Mail, MapPin, Phone, Clock, Send, Loader2, CheckCircle } from "lucide-react"
+import { AuthGuard } from "@/components/auth-guard"
 
 const contactInfo = [
   {
@@ -60,6 +61,7 @@ export default function ContactPage() {
 
   if (isSubmitted) {
     return (
+      <AuthGuard>
       <DashboardLayout title="Contact Us">
         <div className="max-w-2xl mx-auto">
           <Card className="bg-card/50 border-border">
@@ -79,10 +81,12 @@ export default function ContactPage() {
           </Card>
         </div>
       </DashboardLayout>
+      </AuthGuard>
     )
   }
 
   return (
+    <AuthGuard>
     <DashboardLayout title="Contact Us">
       <div className="space-y-6">
         {/* Header */}
@@ -219,5 +223,6 @@ export default function ContactPage() {
         </div>
       </div>
     </DashboardLayout>
+    </AuthGuard>
   )
 }

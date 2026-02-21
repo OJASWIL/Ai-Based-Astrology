@@ -14,7 +14,7 @@ def run_migrations():
                 id             SERIAL PRIMARY KEY,
                 full_name      VARCHAR(100)  NOT NULL,
                 email          VARCHAR(150)  UNIQUE NOT NULL,
-                password_hash  VARCHAR(255)  NOT NULL,
+                password  VARCHAR(255)  NOT NULL,
                 is_active      BOOLEAN       DEFAULT TRUE,
                 created_at     TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
                 updated_at     TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,

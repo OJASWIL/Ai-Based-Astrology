@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Settings, User, Bell, Globe, Shield, Loader2 } from "lucide-react"
+import { AuthGuard } from "@/components/auth-guard"
 
 export default function SettingsPage() {
   const [isLoading, setIsLoading] = useState(false)
@@ -37,6 +38,7 @@ export default function SettingsPage() {
   }
 
   return (
+    <AuthGuard>
     <DashboardLayout title="Settings">
       <div className="max-w-3xl mx-auto space-y-6">
         {/* Header */}
@@ -241,5 +243,6 @@ export default function SettingsPage() {
         </Tabs>
       </div>
     </DashboardLayout>
+    </AuthGuard>
   )
 }

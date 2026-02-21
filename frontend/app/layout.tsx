@@ -44,7 +44,6 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={`${spaceGrotesk.variable} ${notoSansDevanagari.variable} font-sans antialiased`}>
-        {/* AuthProvider wraps everything so useAuth() works on any page */}
         <AuthProvider>
           {children}
         </AuthProvider>

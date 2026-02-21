@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Bot, Calendar, Moon, Sun, ArrowRight, Sparkles, Star } from "lucide-react"
 import Link from "next/link"
+import { AuthGuard } from "@/components/auth-guard"
 
 const quickActions = [
   {
@@ -58,6 +59,7 @@ const todayPrediction = {
 
 export default function DashboardPage() {
   return (
+    <AuthGuard>
     <DashboardLayout title="Dashboard">
       <div className="space-y-8">
         {/* Welcome Section */}
@@ -220,5 +222,6 @@ export default function DashboardPage() {
         </Card>
       </div>
     </DashboardLayout>
+    </AuthGuard>
   )
 }

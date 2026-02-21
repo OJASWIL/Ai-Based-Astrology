@@ -8,7 +8,7 @@ class User:
         self.id             = row["id"]
         self.full_name      = row["full_name"]
         self.email          = row["email"]
-        self.password_hash  = row["password_hash"]
+        self.password       = row["password"]
         self.is_active      = row["is_active"]
         self.created_at     = row["created_at"]
         self.updated_at     = row["updated_at"]
@@ -17,10 +17,10 @@ class User:
     # ── Password ──────────────────────────────────────────────────────────────
 
     def set_password(self, password: str):
-        self.password_hash = generate_password_hash(password)
+        self.password = generate_password_hash(password)
 
     def check_password(self, password: str) -> bool:
-        return check_password_hash(self.password_hash, password)
+        return check_password_hash(self.password, password)
 
     # ── Serializer ────────────────────────────────────────────────────────────
 
@@ -58,14 +58,14 @@ class User:
         return User(row) if row else None
 
     @staticmethod
-    def create(full_name: str, email: str, password_hash: str):
+    def create(full_name: str, email: str, password: str):
         conn = get_db()
         cur  = conn.cursor()
         cur.execute("""
-            INSERT INTO users (full_name, email, password_hash)
+            INSERT INTO users (full_name, email, password)
             VALUES (%s, %s, %s)
             RETURNING *
-        """, (full_name, email, password_hash))
+        """, (full_name, email, password))
         row = cur.fetchone()
         conn.commit()
         cur.close()

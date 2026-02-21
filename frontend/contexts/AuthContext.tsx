@@ -10,9 +10,6 @@ export interface SignupCredentials {
   full_name: string
   email: string
   password: string
-  date_of_birth?: string
-  time_of_birth?: string
-  place_of_birth?: string
 }
 
 interface AuthContextType {

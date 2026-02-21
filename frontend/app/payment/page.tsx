@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Check, Star, Sparkles, CreditCard, Crown, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { AuthGuard } from "@/components/auth-guard"
 
 const plans = [
   {
@@ -69,6 +70,7 @@ export default function PaymentPage() {
   const [selectedPlan, setSelectedPlan] = useState("Premium")
 
   return (
+    <AuthGuard>
     <DashboardLayout title="Premium Plans">
       <div className="space-y-6">
         {/* Header */}
@@ -208,5 +210,6 @@ export default function PaymentPage() {
         </Card>
       </div>
     </DashboardLayout>
+    </AuthGuard>
   )
 }

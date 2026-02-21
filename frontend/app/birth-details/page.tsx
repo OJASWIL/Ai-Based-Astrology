@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Calendar, Clock, MapPin, User, Loader2, Sparkles } from "lucide-react"
+import { AuthGuard } from "@/components/auth-guard"
 
 const districts = [
   "Kathmandu",
@@ -50,6 +51,7 @@ export default function BirthDetailsPage() {
   }
 
   return (
+      <AuthGuard>
     <DashboardLayout title="Birth Details">
       <div className="max-w-2xl mx-auto">
         <Card className="bg-card/50 border-border">
@@ -189,5 +191,6 @@ export default function BirthDetailsPage() {
         </Card>
       </div>
     </DashboardLayout>
+    </AuthGuard>
   )
 }

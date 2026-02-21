@@ -11,9 +11,6 @@ export interface AuthUser {
   id: number
   email: string
   full_name: string
-  date_of_birth: string | null
-  time_of_birth: string | null
-  place_of_birth: string | null
   created_at: string
   last_login: string | null
   is_active: boolean
@@ -79,9 +76,6 @@ export async function signup(payload: {
   full_name: string
   email: string
   password: string
-  date_of_birth?: string
-  time_of_birth?: string
-  place_of_birth?: string
 }): Promise<AuthResponse> {
   const data = await apiRequest<{
     access_token: string

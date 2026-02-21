@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Bot, User, Send, Sparkles, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { AuthGuard } from "@/components/auth-guard"
 
 interface Message {
   id: string
@@ -200,6 +201,7 @@ export default function ChatbotPage() {
   }
 
   return (
+     <AuthGuard>
     <DashboardLayout title="AI Astrologer">
       <div className="h-[calc(100vh-12rem)] flex flex-col">
         {/* Header */}
@@ -298,5 +300,6 @@ export default function ChatbotPage() {
         </Card>
       </div>
     </DashboardLayout>
+    </AuthGuard>
   )
 }
