@@ -1,8 +1,8 @@
 "use client"
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import { login as apiLogin, logout as apiLogout, signup as apiSignup, verifyToken } from '@/lib/authService'
-import type { LoginCredentials, AuthResponse, AuthUser } from '@/lib/authService'
+import { login as apiLogin, logout as apiLogout, signup as apiSignup, verifyToken } from '@/lib/api'
+import type { LoginCredentials, AuthResponse, AuthUser } from '@/lib/api'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

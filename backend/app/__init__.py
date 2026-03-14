@@ -3,6 +3,7 @@ from flask_jwt_extended import JWTManager
 from flask_cors import CORS
 from app.db import init_db
 
+
 jwt = JWTManager()
 
 
@@ -24,6 +25,13 @@ def create_app(config_object="config.Config"):
 
     from app.routes.birth import birth_bp
     app.register_blueprint(birth_bp, url_prefix="/api/birth")
+    
+    from app.routes.janmakundali import janmakundali_bp
+    app.register_blueprint(janmakundali_bp, url_prefix="/api/kundali")
+    
+    from app.routes.gochar import gochar_bp
+    app.register_blueprint(gochar_bp, url_prefix="/api/gochar")
+    
 
     @app.route("/api/health")
     def health():
