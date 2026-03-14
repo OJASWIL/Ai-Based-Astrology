@@ -2,12 +2,16 @@
 
 import { useState } from "react"
 import { DashboardLayout } from "@/components/dashboard-layout"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Card, CardContent, CardDescription,
+  CardFooter, CardHeader, CardTitle,
+} from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Check, Star, Sparkles, CreditCard, Crown, Zap } from "lucide-react"
+import { Check, Star, Sparkles, CreditCard, Crown, Zap, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { AuthGuard } from "@/components/auth-guard"
+import { useToast } from "@/hooks/use-toast"
 
 const plans = [
   {
@@ -16,7 +20,12 @@ const plans = [
     price: 0,
     period: "forever",
     description: "Basic astrology features",
-    features: ["Daily horoscope", "Basic Janma Kundali", "3 AI chat questions/day", "Email support"],
+    features: [
+      "Daily horoscope",
+      "Basic Janma Kundali",
+      "3 AI chat questions/day",
+      "Email support",
+    ],
     limitations: ["Limited chart analysis", "Ads shown"],
     popular: false,
     icon: Star,
@@ -68,148 +77,218 @@ const plans = [
 
 export default function PaymentPage() {
   const [selectedPlan, setSelectedPlan] = useState("Premium")
+  const [loadingPlan, setLoadingPlan] = useState<string | null>(null)
+  const { toast } = useToast()
+
+const handleEsewaPayment = async (plan: (typeof plans)[0]) => {
+  if (plan.price === 0) return
+
+  setLoadingPlan(plan.name)
+
+  try {
+    // ✅ Correct URL matching your app/esewa/initiate/route.ts
+    const res = await fetch("/esewa/initiate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount: plan.price, planName: plan.name }),
+    })
+
+    // Show detailed error from server in console for debugging
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({ error: "Unknown server error" }))
+      console.error("Server error response:", errorData)
+      throw new Error(errorData.error || `Server error: ${res.status}`)
+    }
+
+    const data = await res.json()
+    const { paymentData, paymentUrl } = data
+
+    if (!paymentData || !paymentUrl) {
+      throw new Error("Invalid response from server")
+    }
+
+    // Build and submit the eSewa payment form
+    const form = document.createElement("form")
+    form.method = "POST"
+    form.action = paymentUrl
+
+    Object.entries(paymentData).forEach(([key, value]) => {
+      const input = document.createElement("input")
+      input.type = "hidden"
+      input.name = key
+      input.value = value as string
+      form.appendChild(input)
+    })
+
+    document.body.appendChild(form)
+    form.submit()
+  } catch (error: any) {
+    console.error("Payment error:", error)
+    toast({
+      title: "Payment Error",
+      description: error.message || "Failed to initiate eSewa payment. Please try again.",
+      variant: "destructive",
+    })
+    setLoadingPlan(null)
+  }
+}
 
   return (
     <AuthGuard>
-    <DashboardLayout title="Premium Plans">
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="text-center max-w-2xl mx-auto">
-          <h2 className="text-3xl font-bold gradient-text mb-2">Unlock Your Cosmic Potential</h2>
-          <p className="text-muted-foreground">
-            Choose the plan that best fits your spiritual journey. Upgrade anytime.
-          </p>
-        </div>
-
-        {/* Plans Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-          {plans.map((plan) => (
-            <Card
-              key={plan.name}
-              className={cn(
-                "relative bg-card/50 border-border transition-all cursor-pointer hover:shadow-lg",
-                selectedPlan === plan.name && "border-primary shadow-lg shadow-primary/20",
-                plan.popular && "md:-mt-4 md:mb-4",
-              )}
-              onClick={() => setSelectedPlan(plan.name)}
-            >
-              {plan.popular && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  <Badge className="bg-primary text-primary-foreground">Most Popular</Badge>
-                </div>
-              )}
-              {plan.savings && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  <Badge variant="secondary" className="bg-green-500/20 text-green-400 border-green-500/30">
-                    {plan.savings}
-                  </Badge>
-                </div>
-              )}
-
-              <CardHeader className="text-center pb-2">
-                <div
-                  className={cn(
-                    "w-12 h-12 mx-auto rounded-xl flex items-center justify-center mb-2",
-                    plan.popular ? "bg-primary/20" : "bg-secondary",
-                  )}
-                >
-                  <plan.icon className={cn("w-6 h-6", plan.popular ? "text-primary" : "text-foreground")} />
-                </div>
-                <CardTitle className="text-xl">{plan.name}</CardTitle>
-                <p className="text-sm text-primary">{plan.nepali}</p>
-                <CardDescription>{plan.description}</CardDescription>
-              </CardHeader>
-
-              <CardContent className="text-center">
-                <div className="mb-6">
-                  {plan.originalPrice && (
-                    <span className="text-lg text-muted-foreground line-through mr-2">
-                      रू {plan.originalPrice.toLocaleString()}
-                    </span>
-                  )}
-                  <span className="text-4xl font-bold text-foreground">
-                    {plan.price === 0 ? "Free" : `रू ${plan.price.toLocaleString()}`}
-                  </span>
-                  {plan.price > 0 && <span className="text-muted-foreground">/{plan.period}</span>}
-                </div>
-
-                <ul className="space-y-3 text-left">
-                  {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-2">
-                      <Check className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
-                      <span className="text-sm text-foreground">{feature}</span>
-                    </li>
-                  ))}
-                  {plan.limitations.map((limitation) => (
-                    <li key={limitation} className="flex items-start gap-2 opacity-50">
-                      <span className="w-5 h-5 flex items-center justify-center text-muted-foreground">•</span>
-                      <span className="text-sm text-muted-foreground">{limitation}</span>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-
-              <CardFooter>
-                <Button
-                  className={cn(
-                    "w-full",
-                    plan.popular ? "bg-primary hover:bg-primary/90" : "bg-secondary hover:bg-secondary/80",
-                  )}
-                  variant={plan.popular ? "default" : "secondary"}
-                >
-                  {plan.price === 0 ? "Current Plan" : "Upgrade Now"}
-                </Button>
-              </CardFooter>
-            </Card>
-          ))}
-        </div>
-
-        {/* Payment Methods */}
-        <Card className="bg-card/50 border-border max-w-2xl mx-auto">
-          <CardHeader className="text-center">
-            <CardTitle className="flex items-center justify-center gap-2">
-              <CreditCard className="w-5 h-5 text-primary" />
-              Secure Payment Methods
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap justify-center gap-4">
-              {["eSewa", "Khalti", "IME Pay", "ConnectIPS", "Visa", "Mastercard"].map((method) => (
-                <div
-                  key={method}
-                  className="px-4 py-2 rounded-lg bg-secondary border border-border text-sm text-foreground"
-                >
-                  {method}
-                </div>
-              ))}
-            </div>
-            <p className="text-center text-sm text-muted-foreground mt-4">
-              All transactions are secure and encrypted. Cancel anytime.
+      <DashboardLayout title="Premium Plans">
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="text-center max-w-2xl mx-auto">
+            <h2 className="text-3xl font-bold gradient-text mb-2">
+              Unlock Your Cosmic Potential
+            </h2>
+            <p className="text-muted-foreground">
+              Choose the plan that best fits your spiritual journey. Upgrade anytime.
             </p>
-          </CardContent>
-        </Card>
+          </div>
 
-        {/* FAQ */}
-        <Card className="bg-primary/10 border-primary/30 max-w-2xl mx-auto">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
-                <Sparkles className="w-6 h-6 text-primary" />
+          {/* Plans Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+            {plans.map((plan) => (
+              <Card
+                key={plan.name}
+                className={cn(
+                  "relative bg-card/50 border-border transition-all cursor-pointer hover:shadow-lg",
+                  selectedPlan === plan.name && "border-primary shadow-lg shadow-primary/20",
+                  plan.popular && "md:-mt-4 md:mb-4"
+                )}
+                onClick={() => setSelectedPlan(plan.name)}
+              >
+                {plan.popular && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                    <Badge className="bg-primary text-primary-foreground">Most Popular</Badge>
+                  </div>
+                )}
+                {(plan as any).savings && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                    <Badge
+                      variant="secondary"
+                      className="bg-green-500/20 text-green-400 border-green-500/30"
+                    >
+                      {(plan as any).savings}
+                    </Badge>
+                  </div>
+                )}
+
+                <CardHeader className="text-center pb-2">
+                  <div
+                    className={cn(
+                      "w-12 h-12 mx-auto rounded-xl flex items-center justify-center mb-2",
+                      plan.popular ? "bg-primary/20" : "bg-secondary"
+                    )}
+                  >
+                    <plan.icon
+                      className={cn(
+                        "w-6 h-6",
+                        plan.popular ? "text-primary" : "text-foreground"
+                      )}
+                    />
+                  </div>
+                  <CardTitle className="text-xl">{plan.name}</CardTitle>
+                  <p className="text-sm text-primary">{plan.nepali}</p>
+                  <CardDescription>{plan.description}</CardDescription>
+                </CardHeader>
+
+                <CardContent className="text-center">
+                  <div className="mb-6">
+                    {(plan as any).originalPrice && (
+                      <span className="text-lg text-muted-foreground line-through mr-2">
+                        रू {(plan as any).originalPrice.toLocaleString()}
+                      </span>
+                    )}
+                    <span className="text-4xl font-bold text-foreground">
+                      {plan.price === 0 ? "Free" : `रू ${plan.price.toLocaleString()}`}
+                    </span>
+                    {plan.price > 0 && (
+                      <span className="text-muted-foreground">/{plan.period}</span>
+                    )}
+                  </div>
+
+                  <ul className="space-y-3 text-left">
+                    {plan.features.map((feature) => (
+                      <li key={feature} className="flex items-start gap-2">
+                        <Check className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+                        <span className="text-sm text-foreground">{feature}</span>
+                      </li>
+                    ))}
+                    {plan.limitations.map((limitation) => (
+                      <li key={limitation} className="flex items-start gap-2 opacity-50">
+                        <span className="w-5 h-5 flex items-center justify-center text-muted-foreground">
+                          •
+                        </span>
+                        <span className="text-sm text-muted-foreground">{limitation}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+
+                <CardFooter>
+                  <Button
+                    className={cn(
+                      "w-full gap-2",
+                      plan.popular
+                        ? "bg-primary hover:bg-primary/90"
+                        : "bg-secondary hover:bg-secondary/80"
+                    )}
+                    variant={plan.popular ? "default" : "secondary"}
+                    disabled={loadingPlan === plan.name}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleEsewaPayment(plan)
+                    }}
+                  >
+                    {loadingPlan === plan.name ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Redirecting to eSewa...
+                      </>
+                    ) : plan.price === 0 ? (
+                      "Current Plan"
+                    ) : (
+                      <>
+                        {/* eSewa green logo badge */}
+                        <span className="inline-flex items-center justify-center bg-green-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
+                          eSewa
+                        </span>
+                        Pay रू {plan.price.toLocaleString()}
+                      </>
+                    )}
+                  </Button>
+                </CardFooter>
+              </Card>
+            ))}
+          </div>
+
+
+          {/* Help */}
+          <Card className="bg-primary/10 border-primary/30 max-w-2xl mx-auto">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+                  <Sparkles className="w-6 h-6 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground">Need help choosing?</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Contact our support team for personalized recommendations.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  className="ml-auto bg-transparent flex-shrink-0"
+                >
+                  Contact Support
+                </Button>
               </div>
-              <div>
-                <h3 className="font-semibold text-foreground">Need help choosing?</h3>
-                <p className="text-sm text-muted-foreground">
-                  Contact our support team for personalized recommendations based on your needs.
-                </p>
-              </div>
-              <Button variant="outline" className="ml-auto bg-transparent flex-shrink-0">
-                Contact Support
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </DashboardLayout>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
     </AuthGuard>
   )
 }
