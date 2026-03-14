@@ -34,6 +34,9 @@ def create_app(config_object="config.Config"):
 
     from app.routes.chatbot import chatbot_bp
     app.register_blueprint(chatbot_bp, url_prefix="/api/chatbot")
+    
+    from app.routes.horoscope import horoscope_bp
+    app.register_blueprint(horoscope_bp, url_prefix="/api/horoscope")
 
     # ── Health check ──────────────────────────────────────────────────────
     @app.route("/api/health")

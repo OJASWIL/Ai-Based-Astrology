@@ -4,7 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,8 +13,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Bell, Menu, Settings, User, LogOut } from "lucide-react"
+import { Bell, Menu, Settings, User, LogOut, Loader2 } from "lucide-react"
 import { DashboardSidebar } from "./dashboard-sidebar"
+import { useAuth } from  "@/contexts/AuthContext"
+import { useRouter } from "next/navigation"
 
 interface DashboardHeaderProps {
   title?: string
@@ -22,10 +24,33 @@ interface DashboardHeaderProps {
 
 export function DashboardHeader({ title = "Dashboard" }: DashboardHeaderProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const { user, isLoading, logout } = useAuth()
+  const router = useRouter()
+
+  const getInitials = () => {
+    if (user?.full_name) {
+      return user.full_name
+        .split(" ")
+        .map((n: string) => n[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2)
+    }
+    if (user?.email) return user.email[0].toUpperCase()
+    return "U"
+  }
+
+  const handleLogout = async () => {
+    await logout()
+    router.push("/login")
+  }
+
+  const displayName = user?.full_name || user?.email || "User"
 
   return (
     <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-md border-b border-border">
       <div className="flex items-center justify-between h-16 px-4 sm:px-6">
+
         {/* Mobile Menu */}
         <Sheet open={isOpen} onOpenChange={setIsOpen}>
           <SheetTrigger asChild className="lg:hidden">
@@ -45,6 +70,7 @@ export function DashboardHeader({ title = "Dashboard" }: DashboardHeaderProps) {
 
         {/* Right Side */}
         <div className="flex items-center gap-4">
+
           {/* Notifications */}
           <Button variant="ghost" size="icon" className="relative">
             <Bell className="h-5 w-5" />
@@ -53,39 +79,56 @@ export function DashboardHeader({ title = "Dashboard" }: DashboardHeaderProps) {
           </Button>
 
           {/* User Menu */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-                <Avatar className="h-10 w-10 border-2 border-primary/30">
-                  <AvatarImage src="/diverse-user-avatars.png" alt="User" />
-                  <AvatarFallback className="bg-primary/20 text-primary">U</AvatarFallback>
-                </Avatar>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 bg-card border-border">
-              <DropdownMenuLabel className="text-foreground">My Account</DropdownMenuLabel>
-              <DropdownMenuSeparator className="bg-border" />
-              <DropdownMenuItem asChild className="cursor-pointer">
-                <Link href="/birth-details">
-                  <User className="mr-2 h-4 w-4" />
-                  Profile
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild className="cursor-pointer">
-                <Link href="/settings">
-                  <Settings className="mr-2 h-4 w-4" />
-                  Settings
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator className="bg-border" />
-              <DropdownMenuItem asChild className="cursor-pointer text-destructive">
-                <Link href="/logout">
+          {isLoading ? (
+            <div className="w-10 h-10 flex items-center justify-center">
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="relative h-10 w-10 rounded-full p-0">
+                  <Avatar className="h-10 w-10 border-2 border-primary/30">
+                    <AvatarFallback className="bg-primary/20 text-primary font-semibold">
+                      {getInitials()}
+                    </AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56 bg-card border-border">
+                <DropdownMenuLabel className="text-foreground">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium truncate">{displayName}</span>
+                    {user?.email && (
+                      <span className="text-xs text-muted-foreground font-normal truncate">
+                        {user.email}
+                      </span>
+                    )}
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator className="bg-border" />
+                <DropdownMenuItem asChild className="cursor-pointer">
+                  <Link href="/birth-details">
+                    <User className="mr-2 h-4 w-4" />
+                    Profile
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className="cursor-pointer">
+                  <Link href="/settings">
+                    <Settings className="mr-2 h-4 w-4" />
+                    Settings
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="bg-border" />
+                <DropdownMenuItem
+                  className="cursor-pointer text-destructive focus:text-destructive"
+                  onClick={handleLogout}
+                >
                   <LogOut className="mr-2 h-4 w-4" />
                   Log out
-                </Link>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </div>
     </header>
