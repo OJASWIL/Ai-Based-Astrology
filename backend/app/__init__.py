@@ -14,7 +14,7 @@ def create_app(config_object="config.Config"):
     jwt.init_app(app)
     CORS(
         app,
-        origins=app.config.get("CORS_ORIGINS", ["http://localhost:3000"]),
+        origins=app.config.get("CORS_ORIGINS", ["http://localhost:3000","http://192.168.1.4:3000",]),
         supports_credentials=True,
     )
 
