@@ -1,7 +1,4 @@
-"""
-Migration : create_users_details
-Created   : 2024-01-01 00:00:00
-"""
+
 
 
 def up(conn):
