@@ -138,7 +138,7 @@ export default function DashboardPage() {
               </h2>
               <p className="text-muted-foreground mt-1">
                 {kundali
-                  ? `तपाईंको राशि ${kundali.rashi.sign_np} — ${kundali.nakshatra} नक्षत्र, पाद ${kundali.nakshatra_pada}`
+                  ? `तपाईंको राशि ${kundali.rashi.sign_np} — ${kundali.nakshatra} नक्षत्र, पद ${kundali.nakshatra_pada}`
                   : "Here's your cosmic overview for today"}
               </p>
             </div>
@@ -218,7 +218,7 @@ export default function DashboardPage() {
                     <div className="p-4 rounded-lg bg-secondary/50 border border-border">
                       <p className="text-xs text-muted-foreground mb-1">नक्षत्र</p>
                       <p className="text-lg font-bold text-foreground">{kundali.nakshatra}</p>
-                      <p className="text-xs text-muted-foreground">पाद {kundali.nakshatra_pada}</p>
+                      <p className="text-xs text-muted-foreground">पद {kundali.nakshatra_pada}</p>
                     </div>
                     {kundali.planetary_positions?.slice(0, 2).map((p, i) => (
                       <div key={`${p.planet}-${i}`} className="p-4 rounded-lg bg-secondary/50 border border-border">

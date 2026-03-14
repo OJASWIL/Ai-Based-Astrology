@@ -81,7 +81,7 @@ def get_kundali_context(user_id) -> str:
             "",
             f"लग्न: {saved.lagna_sign}",
             f"राशि: {saved.rashi_sign}",
-            f"नक्षत्र: {saved.nakshatra}, पाद {saved.nakshatra_pada}",
+            f"नक्षत्र: {saved.nakshatra}, पद {saved.nakshatra_pada}",
             f"हाल महादशा: {current_dasha.get('planet','?')} — {current_dasha.get('start','?')} देखि {current_dasha.get('end','?')} सम्म",
             "",
             "ग्रह स्थिति:",

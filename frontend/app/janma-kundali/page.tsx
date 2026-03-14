@@ -10,7 +10,7 @@ import { Download, Share2, Sun, Moon, Star, Sparkles, Loader2 } from "lucide-rea
 import Link from "next/link"
 import { AuthGuard } from "@/components/auth-guard"
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
+const API       = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
 const TOKEN_KEY = "auth_token"
 
 // ── AD → BS conversion ────────────────────────────────────────────────────────
@@ -69,7 +69,6 @@ function adToBS(adDate: string): string {
     const targetDays = Date.UTC(y, m - 1, d) / 86400000
     let diff = Math.round(targetDays - AD_START_DAYS)
     if (diff < 0) return adDate
-
     let bsYear = 2000, bsMonth = 1, bsDay = 1
     while (diff > 0) {
       const md = BS_MONTHS_DATA[bsYear]
@@ -89,52 +88,53 @@ function adToBS(adDate: string): string {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface House {
-  house: number
-  sign: string
-  sign_np: string
-  planets: string[]
+  house:      number
+  sign:       string
+  sign_np:    string
+  planets:    string[]
   planets_np: string[]
 }
 
 interface PlanetPosition {
-  planet: string
+  planet:    string
   planet_np: string
-  sign: string
-  sign_np: string
-  degree: string
+  sign:      string
+  sign_np:   string
+  degree:    string
 }
 
 interface Dasha {
-  planet: string
+  planet:    string
   planet_np: string
-  start: string
-  end: string
-  current: boolean
+  start:     string
+  end:       string
+  current:   boolean
 }
 
 interface Yoga {
-  name: string
-  desc: string
+  name:     string
+  desc:     string
   strength: string
 }
 
 interface Kundali {
   birth_info: {
-    name: string
-    birth_date: string
-    birth_time: string
+    name:        string
+    birth_date:  string
+    birth_time:  string
     birth_place: string
   }
-  lagna: { sign: string; sign_np: string; degree: string }
-  rashi: { sign: string; sign_np: string }
-  nakshatra: string
+  lagna:       { sign: string; sign_np: string; degree: string }
+  rashi:       { sign: string; sign_np: string }
+  nakshatra:   string
   nakshatra_pada: number
-  houses: House[]
+  houses:              House[]
   planetary_positions: PlanetPosition[]
-  dasha: Dasha[]
-  yogas: Yoga[]
+  dasha:  Dasha[]
+  yogas:  Yoga[]
 }
 
+// ── Page ──────────────────────────────────────────────────────────────────────
 export default function JanmaKundaliPage() {
   const [kundali,   setKundali]   = useState<Kundali | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -147,17 +147,16 @@ export default function JanmaKundaliPage() {
     fetch(`${API}/kundali/`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((r) => r.json())
-      .then((json) => {
+      .then(r => r.json())
+      .then(json => {
         if (json.error) throw new Error(json.error)
         setKundali(json.kundali)
       })
-      .catch((e) => setError(e.message))
+      .catch(e => setError(e.message))
       .finally(() => setIsLoading(false))
   }, [])
 
-  // Build chart houses using Nepali planet names
-  const chartHouses = kundali?.houses.map((h) => ({
+  const chartHouses = kundali?.houses.map(h => ({
     house:   h.house,
     sign:    h.sign_np,
     planets: h.planets_np,
@@ -251,7 +250,7 @@ export default function JanmaKundaliPage() {
               <TabsTrigger value="yogas">Yogas</TabsTrigger>
             </TabsList>
 
-            {/* ── Chart Tab ── */}
+            {/* ── Chart Tab ─────────────────────────────────────── */}
             <TabsContent value="chart" className="space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <Card className="bg-card/50 border-border">
@@ -306,7 +305,7 @@ export default function JanmaKundaliPage() {
                 </Card>
               </div>
 
-              {/* House-by-house table */}
+              {/* House table */}
               <Card className="bg-card/50 border-border">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -326,19 +325,23 @@ export default function JanmaKundaliPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {kundali.houses.map((h) => (
-                          <tr key={h.house} className="border-b border-border/50 hover:bg-secondary/30">
+                        {kundali.houses.map((h, i) => (
+                          <tr key={`house-${h.house}-${i}`} className="border-b border-border/50 hover:bg-secondary/30">
                             <td className="py-3 px-4 text-foreground font-medium">
                               House {h.house}
                             </td>
                             <td className="py-3 px-4 text-foreground">
-                              {h.sign_np} <span className="text-muted-foreground text-xs">({h.sign})</span>
+                              {h.sign_np}{" "}
+                              <span className="text-muted-foreground text-xs">({h.sign})</span>
                             </td>
                             <td className="py-3 px-4">
                               {h.planets_np.length > 0 ? (
                                 <div className="flex flex-wrap gap-1">
-                                  {h.planets_np.map((p, i) => (
-                                    <span key={i} className="px-2 py-0.5 rounded-full bg-primary/20 text-primary text-xs font-medium">
+                                  {h.planets_np.map((p, pi) => (
+                                    <span
+                                      key={`house-${h.house}-planet-${pi}`}
+                                      className="px-2 py-0.5 rounded-full bg-primary/20 text-primary text-xs font-medium"
+                                    >
                                       {p}
                                     </span>
                                   ))}
@@ -356,7 +359,7 @@ export default function JanmaKundaliPage() {
               </Card>
             </TabsContent>
 
-            {/* ── Planets Tab ── */}
+            {/* ── Planets Tab ───────────────────────────────────── */}
             <TabsContent value="planets">
               <Card className="bg-card/50 border-border">
                 <CardHeader>
@@ -378,12 +381,14 @@ export default function JanmaKundaliPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {kundali.planetary_positions.map((p) => (
-                          <tr key={p.planet} className="border-b border-border/50 hover:bg-secondary/30">
+                        {/* ✅ Fixed: use index in key to avoid duplicate planet names */}
+                        {kundali.planetary_positions.map((p, i) => (
+                          <tr key={`planet-${p.planet}-${i}`} className="border-b border-border/50 hover:bg-secondary/30">
                             <td className="py-3 px-4 text-foreground">{p.planet}</td>
                             <td className="py-3 px-4 text-primary font-medium">{p.planet_np}</td>
                             <td className="py-3 px-4 text-foreground">
-                              {p.sign_np} <span className="text-muted-foreground text-xs">({p.sign})</span>
+                              {p.sign_np}{" "}
+                              <span className="text-muted-foreground text-xs">({p.sign})</span>
                             </td>
                             <td className="py-3 px-4 text-muted-foreground">{p.degree}</td>
                           </tr>
@@ -395,7 +400,7 @@ export default function JanmaKundaliPage() {
               </Card>
             </TabsContent>
 
-            {/* ── Dasha Tab ── */}
+            {/* ── Dasha Tab ─────────────────────────────────────── */}
             <TabsContent value="dasha">
               <Card className="bg-card/50 border-border">
                 <CardHeader>
@@ -407,20 +412,29 @@ export default function JanmaKundaliPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {kundali.dasha.map((d) => (
-                      <div key={d.planet}
-                        className={`p-4 rounded-lg border ${d.current ? "bg-primary/10 border-primary/30" : "bg-secondary/50 border-border"}`}>
+                    {kundali.dasha.map((d, i) => (
+                      <div
+                        key={`dasha-${d.planet}-${i}`}
+                        className={`p-4 rounded-lg border ${
+                          d.current
+                            ? "bg-primary/10 border-primary/30"
+                            : "bg-secondary/50 border-border"
+                        }`}
+                      >
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="font-semibold text-foreground">
-                              {d.planet_np} <span className="text-muted-foreground font-normal">({d.planet})</span>
+                              {d.planet_np}{" "}
+                              <span className="text-muted-foreground font-normal">({d.planet})</span>
                             </p>
                             <p className="text-sm text-muted-foreground">Mahadasha Period</p>
                           </div>
                           <div className="text-right">
                             <p className="font-medium text-foreground">{d.start} – {d.end}</p>
                             {d.current && (
-                              <span className="text-xs px-2 py-1 rounded-full bg-primary/20 text-primary">Current</span>
+                              <span className="text-xs px-2 py-1 rounded-full bg-primary/20 text-primary">
+                                Current
+                              </span>
                             )}
                           </div>
                         </div>
@@ -431,7 +445,7 @@ export default function JanmaKundaliPage() {
               </Card>
             </TabsContent>
 
-            {/* ── Yogas Tab ── */}
+            {/* ── Yogas Tab ─────────────────────────────────────── */}
             <TabsContent value="yogas">
               <Card className="bg-card/50 border-border">
                 <CardHeader>
@@ -443,11 +457,19 @@ export default function JanmaKundaliPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {kundali.yogas.length === 0 ? (
-                    <p className="text-muted-foreground text-sm">No major yogas detected in your chart.</p>
+                    <p className="text-muted-foreground text-sm">
+                      No major yogas detected in your chart.
+                    </p>
                   ) : (
                     kundali.yogas.map((yoga, i) => (
-                      <div key={i}
-                        className={`p-4 rounded-lg border ${i === 0 ? "bg-primary/10 border-primary/30" : "bg-secondary/50 border-border"}`}>
+                      <div
+                        key={`yoga-${yoga.name}-${i}`}
+                        className={`p-4 rounded-lg border ${
+                          i === 0
+                            ? "bg-primary/10 border-primary/30"
+                            : "bg-secondary/50 border-border"
+                        }`}
+                      >
                         <h4 className="font-semibold text-foreground">{yoga.name}</h4>
                         <p className="text-sm text-muted-foreground mt-1">{yoga.desc}</p>
                         <p className={`text-xs mt-2 ${i === 0 ? "text-primary" : "text-muted-foreground"}`}>
@@ -459,6 +481,7 @@ export default function JanmaKundaliPage() {
                 </CardContent>
               </Card>
             </TabsContent>
+
           </Tabs>
         </div>
       </DashboardLayout>
