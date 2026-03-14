@@ -9,16 +9,19 @@ import { Input } from "@/components/ui/input"
 import { Bot, User, Send, Sparkles, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { AuthGuard } from "@/components/auth-guard"
+import Link from "next/link"
 
 const API       = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
 const TOKEN_KEY = "auth_token"
 
 interface Message {
-  id:        string
-  role:      "user" | "assistant"
-  content:   string
-  timestamp: Date
-  isError?:  boolean
+  id:         string
+  role:       "user" | "assistant"
+  content:    string
+  timestamp:  Date
+  isError?:   boolean
+  isUpgrade?: boolean
+  isNotice?:  boolean
 }
 
 const SUGGESTED = [
@@ -37,14 +40,14 @@ const WELCOME: Message = {
   timestamp: new Date(),
 }
 
-// Simple inline markdown: bold + bullets
+// ── Simple inline markdown ────────────────────────────────────────────────────
 function MsgContent({ text }: { text: string }) {
   return (
     <div className="space-y-0.5">
       {text.split("\n").map((line, i) => {
         if (!line.trim()) return <div key={i} className="h-2" />
         const isBullet = /^[•\-\*]\s/.test(line.trim())
-        const parts = line.replace(/^[•\-\*]\s/, "").split(/(\*\*[^*]+\*\*)/g)
+        const parts    = line.replace(/^[•\-\*]\s/, "").split(/(\*\*[^*]+\*\*)/g)
         const rendered = parts.map((p, j) =>
           p.startsWith("**") && p.endsWith("**")
             ? <strong key={j}>{p.slice(2, -2)}</strong>
@@ -58,7 +61,7 @@ function MsgContent({ text }: { text: string }) {
   )
 }
 
-// Typing dots
+// ── Typing dots ───────────────────────────────────────────────────────────────
 function TypingDots() {
   return (
     <div className="flex gap-1 items-center h-5">
@@ -73,6 +76,24 @@ function TypingDots() {
   )
 }
 
+// ── Bubble className helper ───────────────────────────────────────────────────
+function bubbleClass(msg: Message): string {
+  if (msg.role === "user") {
+    return "bg-primary text-primary-foreground rounded-br-sm"
+  }
+  if (msg.isUpgrade) {
+    return "bg-primary/10 border border-primary/30 text-foreground rounded-bl-sm"
+  }
+  if (msg.isNotice) {
+    return "bg-yellow-500/10 border border-yellow-500/30 text-foreground rounded-bl-sm"
+  }
+  if (msg.isError) {
+    return "bg-destructive/10 border border-destructive/30 text-destructive/90 rounded-bl-sm"
+  }
+  return "bg-secondary border border-border text-foreground rounded-bl-sm"
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 export default function ChatbotPage() {
   const [messages,  setMessages]  = useState<Message[]>([WELCOME])
   const [input,     setInput]     = useState("")
@@ -80,7 +101,6 @@ export default function ChatbotPage() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef  = useRef<HTMLInputElement>(null)
 
-  // Scroll to bottom on new messages
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, isLoading])
@@ -105,9 +125,8 @@ export default function ChatbotPage() {
       const token = localStorage.getItem(TOKEN_KEY)
       if (!token) throw new Error("Login चाहिन्छ।")
 
-      // Send only valid (non-error, non-welcome) messages to API
       const apiMessages = nextMessages
-        .filter(m => m.id !== "welcome" && !m.isError)
+        .filter(m => m.id !== "welcome" && !m.isError && !m.isUpgrade && !m.isNotice)
         .map(m => ({ role: m.role, content: m.content }))
 
       const res = await fetch(`${API}/chatbot/`, {
@@ -119,9 +138,20 @@ export default function ChatbotPage() {
         body: JSON.stringify({ messages: apiMessages }),
       })
 
-      // Try to parse JSON even on error status
       let json: any = {}
       try { json = await res.json() } catch { json = { error: `HTTP ${res.status}` } }
+
+      // ── Free limit reached ──────────────────────────────────────
+      if (res.status === 403 && json.upgrade) {
+        setMessages(prev => [...prev, {
+          id:        `limit-${Date.now()}`,
+          role:      "assistant",
+          content:   `🌟 **आजको नि:शुल्क प्रश्न सकियो!**\n\nतपाईंले आज ${json.limit} वटा नि:शुल्क प्रश्न प्रयोग गर्नुभयो।\n\n**Premium लिएर पाउनुहोस्:**\n• असीमित AI chat\n• विस्तृत कुण्डली विश्लेषण\n• गोचर विश्लेषण\n• व्यक्तिगत मासिक परामर्श\n\n👉 Premium लिन तलको बटन थिच्नुहोस्!`,
+          timestamp: new Date(),
+          isUpgrade: true,
+        }])
+        return
+      }
 
       if (!res.ok || json.error) throw new Error(json.error || `Server error ${res.status}`)
 
@@ -131,6 +161,17 @@ export default function ChatbotPage() {
         content:   json.response,
         timestamp: new Date(),
       }])
+
+      // ── Low usage warning ───────────────────────────────────────
+      if (json.usage && !json.usage.premium && json.usage.remaining <= 3 && json.usage.remaining > 0) {
+        setMessages(prev => [...prev, {
+          id:        `notice-${Date.now()}`,
+          role:      "assistant",
+          content:   `⚡ आज ${json.usage.remaining} प्रश्न मात्र बाँकी छन्। Premium लिएर असीमित प्रश्न सोध्नुहोस्!`,
+          timestamp: new Date(),
+          isNotice:  true,
+        }])
+      }
 
     } catch (err: any) {
       setMessages(prev => [...prev, {
@@ -170,7 +211,7 @@ export default function ChatbotPage() {
           {/* Chat card */}
           <Card className="flex-1 min-h-0 border-border bg-card/50 flex flex-col overflow-hidden">
 
-            {/* ── Messages — scrollable ── */}
+            {/* Messages */}
             <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-4">
               {messages.map(msg => (
                 <div
@@ -185,10 +226,14 @@ export default function ChatbotPage() {
                     "w-7 h-7 rounded-full flex items-center justify-center shrink-0 mb-0.5",
                     msg.role === "user"
                       ? "bg-secondary border border-border"
-                      : "bg-primary/20"
+                      : msg.isUpgrade
+                        ? "bg-primary/20"
+                        : msg.isNotice
+                          ? "bg-yellow-500/20"
+                          : "bg-primary/20"
                   )}>
                     {msg.role === "user"
-                      ? <User className="w-3.5 h-3.5 text-foreground" />
+                      ? <User     className="w-3.5 h-3.5 text-foreground" />
                       : <Sparkles className="w-3.5 h-3.5 text-primary" />
                     }
                   </div>
@@ -196,16 +241,25 @@ export default function ChatbotPage() {
                   {/* Bubble */}
                   <div className={cn(
                     "max-w-[75%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
-                    msg.role === "user"
-                      ? "bg-primary text-primary-foreground rounded-br-sm"
-                      : msg.isError
-                        ? "bg-destructive/10 border border-destructive/30 text-destructive/90 rounded-bl-sm"
-                        : "bg-secondary border border-border text-foreground rounded-bl-sm"
+                    bubbleClass(msg)
                   )}>
                     {msg.role === "assistant" && !msg.isError
                       ? <MsgContent text={msg.content} />
                       : <p className="whitespace-pre-wrap">{msg.content}</p>
                     }
+
+                    {/* Upgrade button */}
+                    {msg.isUpgrade && (
+                      <Link href="/payment">
+                        <Button
+                          size="sm"
+                          className="mt-3 w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+                        >
+                          🌟 Premium लिनुहोस्
+                        </Button>
+                      </Link>
+                    )}
+
                     <p className={cn(
                       "text-[10px] mt-1 select-none",
                       msg.role === "user"
@@ -230,11 +284,10 @@ export default function ChatbotPage() {
                 </div>
               )}
 
-              {/* Scroll anchor */}
               <div ref={bottomRef} />
             </div>
 
-            {/* ── Suggested questions ── */}
+            {/* Suggested questions */}
             <div className="flex-shrink-0 px-4 pt-2 pb-1 border-t border-border">
               <p className="text-[11px] text-muted-foreground mb-1.5">सुझाव:</p>
               <div className="flex flex-wrap gap-1.5">
@@ -251,7 +304,7 @@ export default function ChatbotPage() {
               </div>
             </div>
 
-            {/* ── Input bar ── */}
+            {/* Input */}
             <CardContent className="flex-shrink-0 px-4 py-3 border-t border-border">
               <form onSubmit={handleSubmit} className="flex gap-2">
                 <Input
@@ -271,13 +324,12 @@ export default function ChatbotPage() {
                 >
                   {isLoading
                     ? <Loader2 className="w-4 h-4 animate-spin" />
-                    : <Send className="w-4 h-4" />
+                    : <Send    className="w-4 h-4" />
                   }
                 </Button>
               </form>
             </CardContent>
           </Card>
-
         </div>
       </DashboardLayout>
     </AuthGuard>
