@@ -9,11 +9,10 @@ def up(conn):
             user_id             INTEGER NOT NULL UNIQUE
                                     REFERENCES users(id) ON DELETE CASCADE,
 
-            lagna_sign          VARCHAR(50)  NOT NULL,
+
             lagna_sign_np       VARCHAR(50)  NOT NULL,
             lagna_degree        VARCHAR(20)  NOT NULL,
 
-            rashi_sign          VARCHAR(50)  NOT NULL,
             rashi_sign_np       VARCHAR(50)  NOT NULL,
 
             nakshatra           VARCHAR(100) NOT NULL,

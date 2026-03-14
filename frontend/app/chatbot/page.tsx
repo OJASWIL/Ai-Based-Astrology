@@ -1,225 +1,283 @@
 "use client"
 
 import type React from "react"
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Bot, User, Send, Sparkles, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { AuthGuard } from "@/components/auth-guard"
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
+const API       = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
 const TOKEN_KEY = "auth_token"
 
 interface Message {
-  id: string
-  role: "user" | "assistant"
-  content: string
+  id:        string
+  role:      "user" | "assistant"
+  content:   string
   timestamp: Date
+  isError?:  boolean
 }
 
-const suggestedQuestions = [
+const SUGGESTED = [
   "मेरो आज को दिन कस्तो छ?",
   "मेरो करियरको बारेमा भन्नुहोस्",
-  "Which planet is affecting my health?",
+  "मेरो स्वास्थ्यमा कुन ग्रहको प्रभाव छ?",
   "मेरो विवाह कहिले हुन्छ?",
-  "What remedies should I follow?",
+  "मलाई के उपाय गर्नु पर्छ?",
   "मेरो दशा विश्लेषण गर्नुहोस्",
 ]
 
+const WELCOME: Message = {
+  id:        "welcome",
+  role:      "assistant",
+  content:   "नमस्ते! 🙏 म तपाईंको AI ज्योतिषी हुँ।\n\nम तपाईंको जन्म कुण्डली हेरेर वैदिक ज्योतिष अनुसार मार्गदर्शन दिन सक्छु।\n\n**म यी विषयमा मद्दत गर्न सक्छु:**\n• राशिफल र भविष्यवाणी\n• ग्रह दोष र उपाय\n• करियर, विवाह, स्वास्थ्य\n• दशा विश्लेषण\n\nकृपया आफ्नो प्रश्न सोध्नुहोस्!",
+  timestamp: new Date(),
+}
+
+// Simple inline markdown: bold + bullets
+function MsgContent({ text }: { text: string }) {
+  return (
+    <div className="space-y-0.5">
+      {text.split("\n").map((line, i) => {
+        if (!line.trim()) return <div key={i} className="h-2" />
+        const isBullet = /^[•\-\*]\s/.test(line.trim())
+        const parts = line.replace(/^[•\-\*]\s/, "").split(/(\*\*[^*]+\*\*)/g)
+        const rendered = parts.map((p, j) =>
+          p.startsWith("**") && p.endsWith("**")
+            ? <strong key={j}>{p.slice(2, -2)}</strong>
+            : <span key={j}>{p}</span>
+        )
+        return isBullet
+          ? <div key={i} className="flex gap-2 ml-1"><span className="text-primary shrink-0">•</span><span>{rendered}</span></div>
+          : <div key={i}>{rendered}</div>
+      })}
+    </div>
+  )
+}
+
+// Typing dots
+function TypingDots() {
+  return (
+    <div className="flex gap-1 items-center h-5">
+      {[0, 150, 300].map(delay => (
+        <span
+          key={delay}
+          className="w-2 h-2 rounded-full bg-primary/70 animate-bounce"
+          style={{ animationDelay: `${delay}ms` }}
+        />
+      ))}
+    </div>
+  )
+}
+
 export default function ChatbotPage() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "1",
-      role: "assistant",
-      content: `नमस्ते! 🙏 म तपाईंको AI ज्योतिषी हुँ।
-
-म तपाईंको जन्म कुण्डली हेरेर वैदिक ज्योतिष अनुसार मार्गदर्शन दिन सक्छु। तपाईं नेपाली वा अंग्रेजीमा प्रश्न सोध्न सक्नुहुन्छ।
-
-**म यी विषयमा मद्दत गर्न सक्छु:**
-• राशिफल र भविष्यवाणी
-• ग्रह दोष र उपाय
-• करियर, विवाह, स्वास्थ्य
-• दशा विश्लेषण
-
-कृपया आफ्नो प्रश्न सोध्नुहोस्!`,
-      timestamp: new Date(),
-    },
-  ])
-  const [input, setInput]       = useState("")
+  const [messages,  setMessages]  = useState<Message[]>([WELCOME])
+  const [input,     setInput]     = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const scrollAreaRef = useRef<HTMLDivElement>(null)
-  const inputRef      = useRef<HTMLInputElement>(null)
+  const bottomRef = useRef<HTMLDivElement>(null)
+  const inputRef  = useRef<HTMLInputElement>(null)
 
+  // Scroll to bottom on new messages
   useEffect(() => {
-    if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight
-    }
-  }, [messages])
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [messages, isLoading])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!input.trim() || isLoading) return
+  const sendMessage = useCallback(async (text: string) => {
+    const trimmed = text.trim()
+    if (!trimmed || isLoading) return
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: "user",
-      content: input.trim(),
+    const userMsg: Message = {
+      id:        `u-${Date.now()}`,
+      role:      "user",
+      content:   trimmed,
       timestamp: new Date(),
     }
 
-    const updatedMessages = [...messages, userMessage]
-    setMessages(updatedMessages)
+    const nextMessages = [...messages, userMsg]
+    setMessages(nextMessages)
     setInput("")
     setIsLoading(true)
 
     try {
       const token = localStorage.getItem(TOKEN_KEY)
+      if (!token) throw new Error("Login चाहिन्छ।")
 
-      // Build conversation history for API (exclude first assistant greeting)
-      const apiMessages = updatedMessages
-        .slice(1) // skip initial greeting
+      // Send only valid (non-error, non-welcome) messages to API
+      const apiMessages = nextMessages
+        .filter(m => m.id !== "welcome" && !m.isError)
         .map(m => ({ role: m.role, content: m.content }))
 
-      const response = await fetch(`${API}/chatbot/`, {
-        method: "POST",
+      const res = await fetch(`${API}/chatbot/`, {
+        method:  "POST",
         headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          "Content-Type":  "application/json",
+          "Authorization": `Bearer ${token}`,
         },
         body: JSON.stringify({ messages: apiMessages }),
       })
 
-      const data = await response.json()
+      // Try to parse JSON even on error status
+      let json: any = {}
+      try { json = await res.json() } catch { json = { error: `HTTP ${res.status}` } }
 
-      if (data.error) throw new Error(data.error)
+      if (!res.ok || json.error) throw new Error(json.error || `Server error ${res.status}`)
 
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: data.response,
+      setMessages(prev => [...prev, {
+        id:        `a-${Date.now()}`,
+        role:      "assistant",
+        content:   json.response,
         timestamp: new Date(),
-      }
+      }])
 
-      setMessages(prev => [...prev, assistantMessage])
     } catch (err: any) {
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: `माफ गर्नुहोस्, केही समस्या भयो: ${err.message}`,
+      setMessages(prev => [...prev, {
+        id:        `e-${Date.now()}`,
+        role:      "assistant",
+        content:   `⚠️ ${err.message || "केही समस्या भयो। फेरि प्रयास गर्नुहोस्।"}`,
         timestamp: new Date(),
-      }
-      setMessages(prev => [...prev, errorMessage])
+        isError:   true,
+      }])
     } finally {
       setIsLoading(false)
+      setTimeout(() => inputRef.current?.focus(), 50)
     }
-  }
+  }, [messages, isLoading])
 
-  const handleSuggestedQuestion = (question: string) => {
-    setInput(question)
-    inputRef.current?.focus()
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    sendMessage(input)
   }
 
   return (
     <AuthGuard>
       <DashboardLayout title="AI Astrologer">
-        <div className="h-[calc(100vh-12rem)] flex flex-col">
+        <div className="flex flex-col" style={{ height: "calc(100vh - 7rem)" }}>
 
           {/* Header */}
-          <div className="mb-4">
+          <div className="flex-shrink-0 mb-3">
             <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
               <Bot className="w-6 h-6 text-primary" />
-              AI Astrologer (AI ज्योतिषी)
+              AI ज्योतिषी
             </h2>
-            <p className="text-muted-foreground mt-1">Ask any astrology question in Nepali or English</p>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              नेपाली वा अंग्रेजीमा ज्योतिष प्रश्न सोध्नुहोस्
+            </p>
           </div>
 
-          {/* Chat Container */}
-          <Card className="flex-1 bg-card/50 border-border flex flex-col overflow-hidden">
+          {/* Chat card */}
+          <Card className="flex-1 min-h-0 border-border bg-card/50 flex flex-col overflow-hidden">
 
-            {/* Messages */}
-            <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
-              <div className="space-y-4">
-                {messages.map((message) => (
-                  <div key={message.id} className={cn("flex gap-3", message.role === "user" ? "justify-end" : "")}>
-                    {message.role === "assistant" && (
-                      <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
-                        <Sparkles className="w-4 h-4 text-primary" />
-                      </div>
-                    )}
-                    <div className={cn(
-                      "max-w-[80%] rounded-lg px-4 py-3",
-                      message.role === "user"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-secondary border border-border",
+            {/* ── Messages — scrollable ── */}
+            <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-4">
+              {messages.map(msg => (
+                <div
+                  key={msg.id}
+                  className={cn(
+                    "flex gap-2.5 items-end",
+                    msg.role === "user" ? "flex-row-reverse" : "flex-row"
+                  )}
+                >
+                  {/* Avatar */}
+                  <div className={cn(
+                    "w-7 h-7 rounded-full flex items-center justify-center shrink-0 mb-0.5",
+                    msg.role === "user"
+                      ? "bg-secondary border border-border"
+                      : "bg-primary/20"
+                  )}>
+                    {msg.role === "user"
+                      ? <User className="w-3.5 h-3.5 text-foreground" />
+                      : <Sparkles className="w-3.5 h-3.5 text-primary" />
+                    }
+                  </div>
+
+                  {/* Bubble */}
+                  <div className={cn(
+                    "max-w-[75%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
+                    msg.role === "user"
+                      ? "bg-primary text-primary-foreground rounded-br-sm"
+                      : msg.isError
+                        ? "bg-destructive/10 border border-destructive/30 text-destructive/90 rounded-bl-sm"
+                        : "bg-secondary border border-border text-foreground rounded-bl-sm"
+                  )}>
+                    {msg.role === "assistant" && !msg.isError
+                      ? <MsgContent text={msg.content} />
+                      : <p className="whitespace-pre-wrap">{msg.content}</p>
+                    }
+                    <p className={cn(
+                      "text-[10px] mt-1 select-none",
+                      msg.role === "user"
+                        ? "text-right text-primary-foreground/50"
+                        : "text-left text-muted-foreground/50"
                     )}>
-                      <div className="whitespace-pre-wrap text-sm">{message.content}</div>
-                      <p className="text-xs opacity-50 mt-2">
-                        {message.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </p>
-                    </div>
-                    {message.role === "user" && (
-                      <div className="w-8 h-8 rounded-full bg-secondary border border-border flex items-center justify-center flex-shrink-0">
-                        <User className="w-4 h-4 text-foreground" />
-                      </div>
-                    )}
+                      {msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </p>
                   </div>
-                ))}
+                </div>
+              ))}
 
-                {isLoading && (
-                  <div className="flex gap-3">
-                    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
-                      <Sparkles className="w-4 h-4 text-primary" />
-                    </div>
-                    <div className="bg-secondary border border-border rounded-lg px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                        <span className="text-sm text-muted-foreground">Analyzing your stars...</span>
-                      </div>
-                    </div>
+              {/* Typing indicator */}
+              {isLoading && (
+                <div className="flex gap-2.5 items-end">
+                  <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+                    <Sparkles className="w-3.5 h-3.5 text-primary" />
                   </div>
-                )}
-              </div>
-            </ScrollArea>
+                  <div className="bg-secondary border border-border rounded-2xl rounded-bl-sm px-4 py-3">
+                    <TypingDots />
+                  </div>
+                </div>
+              )}
 
-            {/* Suggested Questions */}
-            <div className="px-4 py-3 border-t border-border">
-              <p className="text-xs text-muted-foreground mb-2">Suggested questions:</p>
-              <div className="flex flex-wrap gap-2">
-                {suggestedQuestions.map((question, index) => (
-                  <Button
-                    key={index}
-                    variant="outline"
-                    size="sm"
-                    className="text-xs bg-transparent"
-                    onClick={() => handleSuggestedQuestion(question)}
+              {/* Scroll anchor */}
+              <div ref={bottomRef} />
+            </div>
+
+            {/* ── Suggested questions ── */}
+            <div className="flex-shrink-0 px-4 pt-2 pb-1 border-t border-border">
+              <p className="text-[11px] text-muted-foreground mb-1.5">सुझाव:</p>
+              <div className="flex flex-wrap gap-1.5">
+                {SUGGESTED.map((q, i) => (
+                  <button
+                    key={i}
+                    onClick={() => sendMessage(q)}
+                    disabled={isLoading}
+                    className="text-[11px] px-3 py-1 rounded-full border border-border bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    {question}
-                  </Button>
+                    {q}
+                  </button>
                 ))}
               </div>
             </div>
 
-            {/* Input */}
-            <CardContent className="p-4 border-t border-border">
+            {/* ── Input bar ── */}
+            <CardContent className="flex-shrink-0 px-4 py-3 border-t border-border">
               <form onSubmit={handleSubmit} className="flex gap-2">
                 <Input
                   ref={inputRef}
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="Type your question... (नेपाली वा English)"
+                  onChange={e => setInput(e.target.value)}
+                  placeholder="प्रश्न सोध्नुहोस्... (नेपाली वा English)"
                   className="flex-1 bg-secondary border-border"
                   disabled={isLoading}
+                  autoComplete="off"
                 />
-                <Button type="submit" size="icon" className="bg-primary hover:bg-primary/90" disabled={isLoading}>
-                  <Send className="w-4 h-4" />
+                <Button
+                  type="submit"
+                  size="icon"
+                  className="bg-primary hover:bg-primary/90 shrink-0"
+                  disabled={isLoading || !input.trim()}
+                >
+                  {isLoading
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <Send className="w-4 h-4" />
+                  }
                 </Button>
               </form>
             </CardContent>
           </Card>
+
         </div>
       </DashboardLayout>
     </AuthGuard>

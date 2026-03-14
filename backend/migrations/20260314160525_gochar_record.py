@@ -10,7 +10,6 @@ def up(conn):
             user_id           INTEGER NOT NULL UNIQUE
                                   REFERENCES users(id) ON DELETE CASCADE,
 
-            natal_lagna_sign    VARCHAR(50) NOT NULL,
             natal_lagna_sign_np VARCHAR(50) NOT NULL,
 
             houses              JSONB NOT NULL DEFAULT '[]',

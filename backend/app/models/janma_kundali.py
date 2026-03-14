@@ -1,5 +1,6 @@
 from app.db import get_db
 import json
+import psycopg2.extras
 
 
 class JanmaKundaliRecord:
@@ -11,10 +12,8 @@ class JanmaKundaliRecord:
     def __init__(self, row: dict):
         self.id                  = row["id"]
         self.user_id             = row["user_id"]
-        self.lagna_sign          = row["lagna_sign"]
         self.lagna_sign_np       = row["lagna_sign_np"]
         self.lagna_degree        = row["lagna_degree"]
-        self.rashi_sign          = row["rashi_sign"]
         self.rashi_sign_np       = row["rashi_sign_np"]
         self.nakshatra           = row["nakshatra"]
         self.nakshatra_pada      = row["nakshatra_pada"]
@@ -30,12 +29,10 @@ class JanmaKundaliRecord:
         return {
             "birth_info": birth_info,
             "lagna": {
-                "sign":    self.lagna_sign,
                 "sign_np": self.lagna_sign_np,
                 "degree":  self.lagna_degree,
             },
             "rashi": {
-                "sign":    self.rashi_sign,
                 "sign_np": self.rashi_sign_np,
             },
             "nakshatra":           self.nakshatra,
@@ -49,7 +46,7 @@ class JanmaKundaliRecord:
     @classmethod
     def find_by_user(cls, user_id: int) -> "JanmaKundaliRecord | None":
         db  = get_db()
-        cur = db.cursor()
+        cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute(
             "SELECT * FROM janma_kundali_records WHERE user_id = %s LIMIT 1",
             (user_id,)
@@ -62,27 +59,25 @@ class JanmaKundaliRecord:
     def upsert(cls, user_id: int, data: dict) -> "JanmaKundaliRecord":
         """Insert or update the kundali record for a user."""
         db  = get_db()
-        cur = db.cursor()
+        cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute(
             """
             INSERT INTO janma_kundali_records (
                 user_id,
-                lagna_sign, lagna_sign_np, lagna_degree,
-                rashi_sign, rashi_sign_np,
+                lagna_sign_np, lagna_degree,
+                rashi_sign_np,
                 nakshatra, nakshatra_pada,
                 houses, planetary_positions, dasha, yogas
             ) VALUES (
                 %s,
-                %s, %s, %s,
                 %s, %s,
+                %s,
                 %s, %s,
                 %s, %s, %s, %s
             )
             ON CONFLICT (user_id) DO UPDATE SET
-                lagna_sign          = EXCLUDED.lagna_sign,
                 lagna_sign_np       = EXCLUDED.lagna_sign_np,
                 lagna_degree        = EXCLUDED.lagna_degree,
-                rashi_sign          = EXCLUDED.rashi_sign,
                 rashi_sign_np       = EXCLUDED.rashi_sign_np,
                 nakshatra           = EXCLUDED.nakshatra,
                 nakshatra_pada      = EXCLUDED.nakshatra_pada,
@@ -95,10 +90,8 @@ class JanmaKundaliRecord:
             """,
             (
                 user_id,
-                data["lagna"]["sign"],
                 data["lagna"]["sign_np"],
                 data["lagna"]["degree"],
-                data["rashi"]["sign"],
                 data["rashi"]["sign_np"],
                 data["nakshatra"],
                 data["nakshatra_pada"],

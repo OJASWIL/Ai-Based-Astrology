@@ -157,7 +157,6 @@ def assign_to_houses(lagna_lon: float, planet_lons: dict) -> list:
         sign_idx = (lagna_sign + i) % 12
         houses.append({
             "house":      i + 1,
-            "sign":       SIGNS_NP[sign_idx],
             "sign_np":    SIGNS_NP[sign_idx],
             "planets":    [],
             "planets_np": [],
@@ -318,9 +317,7 @@ def _do_calculate(detail) -> dict:
         sign_idx    = get_sign_index(lon_deg)
         deg_in_sign = get_degree_in_sign(lon_deg)
         planetary_positions.append({
-            "planet":    PLANET_NP_MAP[planet],
             "planet_np": PLANET_NP_MAP[planet],
-            "sign":      SIGNS_NP[sign_idx],
             "sign_np":   SIGNS_NP[sign_idx],
             "degree":    format_degree(deg_in_sign),
             "longitude": round(lon_deg, 4),
@@ -328,12 +325,10 @@ def _do_calculate(detail) -> dict:
 
     return {
         "lagna": {
-            "sign":    SIGNS_NP[lagna_sign_idx],
             "sign_np": SIGNS_NP[lagna_sign_idx],
             "degree":  format_degree(get_degree_in_sign(lagna_lon)),
         },
         "rashi": {
-            "sign":    SIGNS_NP[get_sign_index(planet_lons["Moon"])],
             "sign_np": SIGNS_NP[get_sign_index(planet_lons["Moon"])],
         },
         "nakshatra":           nak,

@@ -9,10 +9,7 @@ from datetime import datetime, timedelta
 
 gochar_bp = Blueprint("gochar", __name__)
 
-SIGNS_EN = [
-    "Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo",
-    "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"
-]
+
 SIGNS_NP = [
     "मेष", "वृष", "मिथुन", "कर्कट", "सिंह", "कन्या",
     "तुला", "वृश्चिक", "धनु", "मकर", "कुम्भ", "मीन"
@@ -307,15 +304,13 @@ def _do_calculate(detail) -> dict:
 
     planet_lons, _ = get_current_planet_positions()
 
-    # Build gochar houses
+    # Build gochar houses — only "planets_np" key (matches DB schema)
     gochar_houses = []
     for i in range(12):
         sign_idx = (natal_lagna_sign + i) % 12
         gochar_houses.append({
             "house":      i + 1,
-            "sign":       SIGNS_NP[sign_idx],
             "sign_np":    SIGNS_NP[sign_idx],
-            "planets":    [],
             "planets_np": [],
         })
 
@@ -326,16 +321,14 @@ def _do_calculate(detail) -> dict:
         house_idx    = (planet_sign - natal_lagna_sign) % 12
         gochar_house = house_idx + 1
 
-        gochar_houses[house_idx]["planets"].append(PLANET_NP_MAP[planet])
+        # Fixed: only append to planets_np (removed stray "planets" key)
         gochar_houses[house_idx]["planets_np"].append(PLANET_NP_MAP[planet])
 
         effect_info = get_transit_effect(planet, gochar_house)
         deg_in_sign = get_degree_in_sign(lon)
 
         transit_details.append({
-            "planet":       PLANET_NP_MAP[planet],
             "planet_np":    PLANET_NP_MAP[planet],
-            "current_sign": SIGNS_NP[planet_sign],
             "sign_np":      SIGNS_NP[planet_sign],
             "degree":       format_degree(deg_in_sign),
             "gochar_house": gochar_house,
@@ -347,7 +340,6 @@ def _do_calculate(detail) -> dict:
 
     return {
         "natal_lagna": {
-            "sign":    SIGNS_NP[natal_lagna_sign],
             "sign_np": SIGNS_NP[natal_lagna_sign],
         },
         "houses":          gochar_houses,
