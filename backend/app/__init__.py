@@ -37,6 +37,9 @@ def create_app(config_object="config.Config"):
     
     from app.routes.horoscope import horoscope_bp
     app.register_blueprint(horoscope_bp, url_prefix="/api/horoscope")
+    
+    from app.routes.contact import contact_bp
+    app.register_blueprint(contact_bp, url_prefix="/api/contact")
 
     # ── Health check ──────────────────────────────────────────────────────
     @app.route("/api/health")
