@@ -41,6 +41,7 @@ def create_app(config_object="config.Config"):
     from app.routes.horoscope    import horoscope_bp
     from app.routes.contact      import contact_bp
     from app.routes.settings     import settings_bp
+    from app.routes.payment      import payment_bp
 
     app.register_blueprint(auth_bp,         url_prefix="/api/auth")
     app.register_blueprint(birth_bp,        url_prefix="/api/birth")
@@ -50,6 +51,7 @@ def create_app(config_object="config.Config"):
     app.register_blueprint(horoscope_bp,    url_prefix="/api/horoscope")
     app.register_blueprint(contact_bp,      url_prefix="/api/contact")
     app.register_blueprint(settings_bp,     url_prefix="/api/settings")
+    app.register_blueprint(payment_bp,      url_prefix="/api/payment")
 
     @app.route("/api/health")
     def health():

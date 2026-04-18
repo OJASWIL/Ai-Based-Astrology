@@ -45,6 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setIsLoading(true)
       const storedToken = localStorage.getItem(TOKEN_KEY)
+      const storedUser  = localStorage.getItem(USER_KEY)
 
       if (!storedToken) {
         setUser(null)
@@ -52,16 +53,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return
       }
 
-      const response = await verifyToken(storedToken)
-      setUser(response.user)
-      setToken(storedToken)
-    } catch {
-      // Token invalid/expired — clear everything
-      setUser(null)
-      setToken(null)
-      localStorage.removeItem(TOKEN_KEY)
-      localStorage.removeItem(REFRESH_KEY)
-      localStorage.removeItem(USER_KEY)
+      // ✅ पहिले localStorage बाट नै user set गर्नुस् (instant load)
+      if (storedUser) {
+        setUser(JSON.parse(storedUser))
+        setToken(storedToken)
+      }
+
+      // Background मा API verify गर्नुस्
+      try {
+        const response = await verifyToken(storedToken)
+        setUser(response.user)
+        setToken(storedToken)
+        localStorage.setItem(USER_KEY, JSON.stringify(response.user))
+      } catch (verifyError: any) {
+        const isAuthError =
+          verifyError?.message?.includes('401') ||
+          verifyError?.message?.includes('Unauthorized') ||
+          verifyError?.message?.includes('Invalid token') ||
+          verifyError?.message?.includes('Token has expired')
+
+        if (isAuthError) {
+          // ✅ साँच्चै token invalid/expired भए मात्र logout
+          setUser(null)
+          setToken(null)
+          localStorage.removeItem(TOKEN_KEY)
+          localStorage.removeItem(REFRESH_KEY)
+          localStorage.removeItem(USER_KEY)
+        }
+        // Network error वा अरू error भए: user logged in नै रहन्छ
+      }
+
     } finally {
       setIsLoading(false)
     }

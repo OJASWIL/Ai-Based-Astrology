@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next"
 import { Space_Grotesk, Noto_Sans_Devanagari } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { AuthProvider } from "@/contexts/AuthContext"
+import { LanguageProvider } from "@/contexts/LanguageContext"
 import "./globals.css"
 
 const spaceGrotesk = Space_Grotesk({
@@ -45,7 +46,9 @@ export default function RootLayout({
     <html lang="en" className="dark">
       <body className={`${spaceGrotesk.variable} ${notoSansDevanagari.variable} font-sans antialiased`}>
         <AuthProvider>
-          {children}
+          <LanguageProvider>
+            {children}
+          </LanguageProvider>
         </AuthProvider>
         <Analytics />
       </body>

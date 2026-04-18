@@ -17,7 +17,7 @@ export interface AuthUser {
 }
 
 export interface AuthResponse {
-  token: string          // maps to access_token from Flask
+  token: string
   refresh_token: string
   user: AuthUser
   message: string
@@ -44,7 +44,8 @@ async function apiRequest<T>(
   const data = await res.json()
 
   if (!res.ok) {
-    throw new Error(data.error || "Request failed")
+    // ✅ Status code सहित throw गर्नुस्
+    throw new Error(`${res.status}: ${data.error || "Request failed"}`)
   }
 
   return data as T
@@ -63,7 +64,6 @@ export async function login(credentials: LoginCredentials): Promise<AuthResponse
     body: JSON.stringify(credentials),
   })
 
-  // Flask returns "access_token" — we map it to "token" for the context
   return {
     token: data.access_token,
     refresh_token: data.refresh_token,
@@ -96,7 +96,21 @@ export async function signup(payload: {
 }
 
 export async function verifyToken(token: string): Promise<{ user: AuthUser }> {
-  return apiRequest<{ user: AuthUser }>("/auth/me", { token })
+  const res = await fetch(`${API_BASE}/auth/me`, {
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  })
+
+  const data = await res.json()
+
+  if (!res.ok) {
+    // ✅ "401: Token expired" format मा throw
+    throw new Error(`${res.status}: ${data.error || "Request failed"}`)
+  }
+
+  return data as { user: AuthUser }
 }
 
 export async function logout(token: string): Promise<void> {

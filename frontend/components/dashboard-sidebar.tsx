@@ -3,21 +3,22 @@
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { Bot, Calendar, CreditCard, Home, LogOut, Mail, Moon, Sparkles, Sun, User, Settings } from "lucide-react"
+import { Bot, Calendar, CreditCard, Home, LogOut, Mail, Moon, Sparkles, Sun, User, Settings, Globe } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { useAuth } from  "@/contexts/AuthContext"
+import { useAuth } from "@/contexts/AuthContext"
+import { useLanguage } from "@/contexts/LanguageContext"
 
 const sidebarLinks = [
-  { href: "/dashboard",     label: "Dashboard",     icon: Home                              },
-  { href: "/horoscope",     label: "Horoscope",     icon: Calendar, nepali: "राशिफल"       },
-  { href: "/janma-kundali", label: "Janma Kundali", icon: Sun,      nepali: "जन्म कुण्डली" },
-  { href: "/gochar",        label: "Gochar",        icon: Moon,     nepali: "गोचर"          },
-  { href: "/chatbot",       label: "AI Chat",       icon: Bot,      nepali: "AI च्याट"      },
-  { href: "/birth-details", label: "Birth Details", icon: User,     nepali: "जन्म विवरण"    },
-  { href: "/payment",       label: "Premium",       icon: CreditCard                        },
-  { href: "/contact",       label: "Contact",       icon: Mail                              },
-  { href: "/settings",      label: "Settings",      icon: Settings                          },
+  { href: "/dashboard",     key: "nav.dashboard",    icon: Home       },
+  { href: "/horoscope",     key: "nav.horoscope",    icon: Calendar   },
+  { href: "/janma-kundali", key: "nav.kundali",      icon: Sun        },
+  { href: "/gochar",        key: "nav.gochar",       icon: Moon       },
+  { href: "/chatbot",       key: "nav.chatbot",      icon: Bot        },
+  { href: "/birth-details", key: "nav.birthDetails", icon: User       },
+  { href: "/payment",       key: "nav.premium",      icon: CreditCard },
+  { href: "/contact",       key: "nav.contact",      icon: Mail       },
+  { href: "/settings",      key: "nav.settings",     icon: Settings   },
 ]
 
 interface DashboardSidebarProps {
@@ -25,18 +26,14 @@ interface DashboardSidebarProps {
 }
 
 export function DashboardSidebar({ className }: DashboardSidebarProps) {
-  const pathname        = usePathname()
-  const router          = useRouter()
-  const { user, logout } = useAuth()
+  const pathname             = usePathname()
+  const router               = useRouter()
+  const { user, logout }     = useAuth()
+  const { t, language, setLanguage } = useLanguage()
 
   const getInitials = () => {
     if (user?.full_name) {
-      return user.full_name
-        .split(" ")
-        .map((n: string) => n[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 2)
+      return user.full_name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)
     }
     if (user?.email) return user.email[0].toUpperCase()
     return "U"
@@ -89,6 +86,7 @@ export function DashboardSidebar({ className }: DashboardSidebarProps) {
             <Link
               key={link.href}
               href={link.href}
+              suppressHydrationWarning
               className={cn(
                 "flex items-center gap-3 px-4 py-3 rounded-lg transition-all",
                 isActive
@@ -97,28 +95,40 @@ export function DashboardSidebar({ className }: DashboardSidebarProps) {
               )}
             >
               <link.icon className="w-5 h-5 shrink-0" />
-              <div className="flex flex-col min-w-0">
-                <span className="text-sm font-medium">{link.label}</span>
-                {link.nepali && (
-                  <span className="text-xs opacity-70">{link.nepali}</span>
-                )}
-              </div>
+              <span className="text-sm font-medium" suppressHydrationWarning>{t(link.key)}</span>
             </Link>
           )
         })}
       </nav>
 
-      {/* Logout */}
-      <div className="p-4 border-t border-border">
+      {/* Language Toggle + Logout */}
+      <div className="p-4 border-t border-border space-y-2">
+
+        {/* Language Toggle */}
+        <Button
+          variant="ghost"
+          className="w-full justify-start text-muted-foreground hover:text-foreground"
+          onClick={() => setLanguage(language === "nepali" ? "english" : "nepali")}
+          suppressHydrationWarning
+        >
+          <Globe className="w-5 h-5 mr-3" />
+          <span suppressHydrationWarning>
+            {language === "nepali" ? "Switch to English" : "नेपालीमा जानुहोस्"}
+          </span>
+        </Button>
+
+        {/* Logout */}
         <Button
           variant="ghost"
           className="w-full justify-start text-muted-foreground hover:text-destructive"
           onClick={handleLogout}
+          suppressHydrationWarning
         >
           <LogOut className="w-5 h-5 mr-3" />
-          Logout
+          <span suppressHydrationWarning>{t("nav.logout")}</span>
         </Button>
       </div>
+
     </aside>
   )
 }

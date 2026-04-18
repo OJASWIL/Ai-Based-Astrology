@@ -1,28 +1,27 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
+from app.utils.token import get_current_user_id
+from app.models.janma_kundali import JanmaKundaliRecord
+from app.models.birth_detail import BirthDetail
+from app.routes.payment import get_premium_status
+from app.routes.gochar import _do_calculate
 import urllib.request
-import urllib.error
+import json
 import re
-from datetime import datetime
-from functools import lru_cache
+from datetime import datetime, date
 import time
+import os
 
 horoscope_bp = Blueprint("horoscope", __name__)
 
-# ── Rashi URL mapping ─────────────────────────────────────────────────────────
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY_Horoscope", "")  
+GROQ_MODEL   = "llama-3.1-8b-instant"                        
+
+# ── Rashi mappings ────────────────────────────────────────────────────────────
 RASHI_URL_MAP = {
-    "मेष":      "Mesh",
-    "वृष":      "Brish",
-    "मिथुन":   "Mithun",
-    "कर्कट":   "Karkat",
-    "सिंह":    "Singha",
-    "कन्या":   "Kanya",
-    "तुला":    "Tula",
-    "वृश्चिक": "Brischik",
-    "धनु":     "Dhanu",
-    "मकर":     "Makar",
-    "कुम्भ":   "Kumbha",
-    "मीन":     "Meen",
+    "मेष": "Mesh", "वृष": "Brish", "मिथुन": "Mithun", "कर्कट": "Karkat",
+    "सिंह": "Singha", "कन्या": "Kanya", "तुला": "Tula", "वृश्चिक": "Brischik",
+    "धनु": "Dhanu", "मकर": "Makar", "कुम्भ": "Kumbha", "मीन": "Meen",
 }
 
 RASHI_INFO = {
@@ -40,365 +39,338 @@ RASHI_INFO = {
     "मीन":     {"english": "Pisces",      "symbol": "♓", "element": "Water", "color": "#14b8a6"},
 }
 
-# Cache: {(rashi_slug, period, date_str): (text, lucky_color, lucky_number, timestamp)}
 _cache: dict = {}
-CACHE_TTL = 3600  # 1 hour
+CACHE_TTL        = 3600
+CACHE_TTL_YEARLY = 86400
 
 
-def _parse_yearly(html: str, url: str) -> dict:
-    """Parse yearly rashifal — extracts rich data including monthly breakdown."""
+# ── Groq API helper ───────────────────────────────────────────────────────────
 
-    def clean(s: str) -> str:
-        s = re.sub(r'<[^>]+>', '', s)
-        s = re.sub(r'\s+', ' ', s).strip()
-        return s
+def call_groq(prompt: str, max_tokens: int = 2000, retries: int = 3) -> str:
+    for attempt in range(retries):
+        try:
+            payload = json.dumps({
+                "model": GROQ_MODEL,  # llama-3.1-8b-instant
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": max_tokens
+            }).encode("utf-8")
 
-    # ── Main yearly summary (first big paragraph) ─────────────────────────────
-    text = ""
-    blocks = re.findall(
-        r'\n\n([^\n<]{80,}(?:छ|छन्|हुनेछ|रहनेछ|पर्नेछ)[^\n<]{0,500})\n',
-        html
-    )
-    skip = ["hamropatro", "Calendar", "Rashifal", "Features", "Login", "वैशाख २०"]
-    for b in blocks:
-        if not any(s in b for s in skip) and len(b) > 80:
-            text = clean(b)
-            break
+            req = urllib.request.Request(
+                "https://api.groq.com/openai/v1/chat/completions",
+                data=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {GROQ_API_KEY}"
+                },
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+            raw = body["choices"][0]["message"]["content"].strip()
+            raw = re.sub(r"^```(?:json)?\s*", "", raw)
+            raw = re.sub(r"\s*```$",          "", raw)
+            return raw
 
-    # ── Monthly breakdown ────────────────────────────────────────────────────
-    bs_months = ["वैशाख","जेठ","असार","साउन","भदौ","असोज","कार्तिक","मङ्सिर","पुस","माघ","फागुन","चैत"]
-    monthly_breakdown = {}
-    for month in bs_months:
-        pattern = rf'{month}\s*[:：]\s*([^\n]+)'
-        m = re.search(pattern, html)
-        if m:
-            monthly_breakdown[month] = clean(m.group(1))
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and attempt < retries - 1:
+                time.sleep(2 ** attempt)  # 1s → 2s → 4s
+                continue
+            raise
 
-    # ── Section extracts ─────────────────────────────────────────────────────
-    def extract_section(heading: str) -> str:
-        pattern = rf'{heading}\s*\n+([^\n]{{30,}}(?:\n[^\n]{{10,}})*?)(?=\n\n[^\n]{{0,30}}\n|\Z)'
-        m = re.search(pattern, html, re.DOTALL)
-        if m:
-            return clean(m.group(1))
+
+def parse_json(raw: str) -> dict:
+    try:
+        return json.loads(raw)
+    except Exception:
+        return {"error": "JSON parse failed"}
+
+
+# ── Kundali summary ───────────────────────────────────────────────────────────
+
+def build_kundali_summary(user_id: int) -> str:
+    try:
+        record = JanmaKundaliRecord.find_by_user(user_id)
+        detail = BirthDetail.find_by_user(user_id)
+        if not record or not detail:
+            return ""
+
+        current_dasha = ""
+        if record.dasha:
+            for d in record.dasha:
+                if d.get("current"):
+                    current_dasha = d.get("planet_np", "")
+                    break
+
+        planet_lines = []
+        if record.planetary_positions:
+            for p in record.planetary_positions[:5]:
+                planet_lines.append(f"{p.get('planet_np')} {p.get('sign_np')} मा")
+
+        yoga_names = []
+        if record.yogas:
+            yoga_names = [y.get("name", "") for y in record.yogas[:3]]
+
+        return f"""जन्म विवरण:
+- जन्म मिति: {detail.birth_date}
+- जन्म समय: {str(detail.birth_time)[:5]}
+- जन्म स्थान: {detail.birth_place}
+- लग्न: {record.lagna_sign_np}
+- राशि: {record.rashi_sign_np}
+- नक्षत्र: {record.nakshatra} (पाद {record.nakshatra_pada})
+- वर्तमान महादशा: {current_dasha}
+- ग्रह स्थिति: {', '.join(planet_lines)}
+- योगहरू: {', '.join(yoga_names) if yoga_names else 'सामान्य'}"""
+    except Exception:
         return ""
 
-    career  = extract_section("कार्यक्षेत्र")
-    love    = extract_section("प्रेम सम्बन्ध")
-    health  = extract_section("स्वास्थ्य")
-    education = extract_section("शिक्षा")
-    remedy  = extract_section("उपाय")
 
-    # ── Lucky info ────────────────────────────────────────────────────────────
-    lucky_color  = ""
-    lucky_number = ""
-    lucky_day    = ""
-    lucky_month  = ""
+# ── Gochar summary ────────────────────────────────────────────────────────────
 
-    cm = re.search(r'शुभ रंग\s*\n([^\n]+)', html)
-    if cm: lucky_color = clean(cm.group(1))
+def build_gochar_summary(user_id: int) -> str:
+    try:
+        detail = BirthDetail.find_by_user(user_id)
+        if not detail:
+            return ""
 
-    nm = re.search(r'शुभ अंक\s*\n([^\n]+)', html)
-    if nm: lucky_number = clean(nm.group(1))
+        gochar_data     = _do_calculate(detail, language="nepali")
+        transit_details = gochar_data.get("transit_details", [])
+        natal_lagna     = gochar_data.get("natal_lagna", {}).get("sign_np", "")
 
-    dm = re.search(r'शुभ बार\s*\n([^\n]+)', html)
-    if dm: lucky_day = clean(dm.group(1))
+        lines = [f"वर्तमान गोचर (नाताल लग्न: {natal_lagna}):"]
+        for t in transit_details:
+            lines.append(
+                f"- {t['planet_np']} → भाव {t['gochar_house']} ({t['sign_np']}): "
+                f"{t['effect']} — {t['description']}"
+            )
 
-    mm = re.search(r'शुभ महिना\s*\n([^\n]+)', html)
-    if mm: lucky_month = clean(mm.group(1))
-
-    # ── BS year from heading ──────────────────────────────────────────────────
-    year_m = re.search(r'विक्रम संवत्[् ]+(\d+)', html)
-    bs_year = year_m.group(1) if year_m else str(datetime.now().year + 57)
-
-    result = {
-        "text":              text,
-        "monthly_breakdown": monthly_breakdown,
-        "career":            career,
-        "love":              love,
-        "health":            health,
-        "education":         education,
-        "remedy":            remedy,
-        "lucky_color":       lucky_color,
-        "lucky_number":      lucky_number,
-        "lucky_day":         lucky_day,
-        "lucky_month":       lucky_month,
-        "bs_year":           bs_year,
-        "bs_date":           f"वि.सं. {bs_year}",
-    }
-    return result
+        return "\n".join(lines)
+    except Exception:
+        return ""
 
 
-def fetch_hamropatro(slug: str, period: str = "daily") -> dict:
-    """Fetch and parse rashifal from HamroPatro."""
-    today_str = datetime.now().strftime("%Y-%m-%d")
-    # Yearly cache TTL = 24 hours (changes less often)
-    cache_key = (slug, period, today_str if period != "yearly" else datetime.now().strftime("%Y-%m"))
+# ── Prompt builder ────────────────────────────────────────────────────────────
 
-    if cache_key in _cache:
-        cached_time, cached_data = _cache[cache_key]
-        ttl = 86400 if period == "yearly" else CACHE_TTL
-        if time.time() - cached_time < ttl:
-            return cached_data
+def _period_label(period: str) -> str:
+    return {"daily": "दैनिक", "weekly": "साप्ताहिक",
+            "monthly": "मासिक", "yearly": "वार्षिक"}.get(period, period)
 
-    # Build URL
+
+def build_prompt(rashi: str, english: str, period: str,
+                 bs_year: str, kundali_summary: str = "",
+                 gochar_summary: str = "") -> tuple:
+
+    personalized = bool(kundali_summary)
+    label        = _period_label(period)
+
+    context = ""
+    if kundali_summary:
+        context += f"\n\nव्यक्तिगत कुण्डली:\n{kundali_summary}"
+    if gochar_summary:
+        context += f"\n\n{gochar_summary}"
+
+    personal_note = ""
+    if personalized:
+        personal_note = "माथिको ग्रह स्थिति, दशा, लग्न, नक्षत्र र वर्तमान गोचरलाई आधार मानेर व्यक्तिगत फलादेश दिनुहोस्।\n\n"
+
     if period == "yearly":
-        url = f"https://www.hamropatro.com/rashifal/yearly/{slug}"
-    elif period == "weekly":
-        url = f"https://www.hamropatro.com/rashifal/weekly/{slug}"
+        prompt = f"""तपाईं एक अनुभवी नेपाली ज्योतिषी हुनुहुन्छ। विक्रम संवत् {bs_year} को लागि {rashi} ({english}) राशिको {label} राशिफल लेख्नुहोस्।{context}
+
+{personal_note}JSON मात्र दिनुहोस्, अरू केही नलेख्नुहोस्:
+{{
+  "prediction": "३-४ वाक्यको समग्र वार्षिक सारांश",
+  "monthly_breakdown": {{
+    "वैशाख": "फलादेश","जेठ": "फलादेश","असार": "फलादेश","साउन": "फलादेश",
+    "भदौ": "फलादेश","असोज": "फलादेश","कार्तिक": "फलादेश","मङ्सिर": "फलादेश",
+    "पुस": "फलादेश","माघ": "फलादेश","फागुन": "फलादेश","चैत": "फलादेश"
+  }},
+  "career": "कार्यक्षेत्र २-३ वाक्य",
+  "love": "प्रेम सम्बन्ध २-३ वाक्य",
+  "health": "स्वास्थ्य २-३ वाक्य",
+  "education": "शिक्षा २-३ वाक्य",
+  "remedy": "शुभ उपाय",
+  "lucky_color": "शुभ रंग",
+  "lucky_number": "शुभ अंक",
+  "lucky_day": "शुभ बार",
+  "lucky_month": "शुभ महिना"
+}}"""
+        return prompt, 3000
+
     elif period == "monthly":
-        url = f"https://www.hamropatro.com/rashifal/monthly/{slug}"
-    else:
-        url = f"https://www.hamropatro.com/rashifal/daily/{slug}"
+        prompt = f"""तपाईं एक अनुभवी नेपाली ज्योतिषी हुनुहुन्छ। {rashi} ({english}) राशिको यो महिनाको {label} राशिफल लेख्नुहोस्।{context}
 
-    try:
-        req = urllib.request.Request(
-            url,
-            headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Accept": "text/html,application/xhtml+xml",
-                "Accept-Language": "ne,en;q=0.9",
-            }
-        )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            html = resp.read().decode("utf-8")
-    except Exception as e:
-        return {"error": str(e), "text": "", "lucky_color": "", "lucky_number": ""}
+{personal_note}JSON मात्र दिनुहोस्:
+{{
+  "prediction": "मासिक सारांश ३-४ वाक्य",
+  "career": "कार्यक्षेत्र",
+  "love": "प्रेम सम्बन्ध",
+  "health": "स्वास्थ्य",
+  "lucky_color": "शुभ रंग",
+  "lucky_number": "शुभ अंक"
+}}"""
+        return prompt, 1200
 
-    # ── YEARLY: special rich parsing ─────────────────────────────────────────
+    elif period == "weekly":
+        prompt = f"""तपाईं एक अनुभवी नेपाली ज्योतिषी हुनुहुन्छ। {rashi} ({english}) राशिको यो हप्ताको {label} राशिफल लेख्नुहोस्।{context}
+
+{personal_note}JSON मात्र दिनुहोस्:
+{{
+  "prediction": "साप्ताहिक सारांश २-३ वाक्य",
+  "lucky_color": "शुभ रंग",
+  "lucky_number": "शुभ अंक"
+}}"""
+        return prompt, 800
+
+    else:  # daily
+        prompt = f"""तपाईं एक अनुभवी नेपाली ज्योतिषी हुनुहुन्छ। {rashi} ({english}) राशिको आजको {label} राशिफल लेख्नुहोस्।{context}
+
+{personal_note}JSON मात्र दिनुहोस्:
+{{
+  "prediction": "आजको फलादेश २-३ वाक्य",
+  "lucky_color": "शुभ रंग",
+  "lucky_number": "शुभ अंक"
+}}"""
+        return prompt, 700
+
+
+# ── Cache key ─────────────────────────────────────────────────────────────────
+
+def make_cache_key(user_id: int, rashi: str, period: str, is_premium: bool) -> str:
     if period == "yearly":
-        return _parse_yearly(html, url)
+        date_part = datetime.now().strftime("%Y-%m")
+    elif period == "weekly":
+        date_part = date.today().strftime("%Y-W%W")
+    else:
+        date_part = datetime.now().strftime("%Y-%m-%d")
 
-    # ── Extract main prediction text ──────────────────────────────────────────
-    text = ""
+    if is_premium:
+        return f"prem_{user_id}_{period}_{date_part}"
+    else:
+        return f"free_{rashi}_{period}_{date_part}"
 
-    patterns = [
-        r'<h2[^>]*>.*?(?:मेष|वृष|मिथुन|कर्कट|सिंह|कन्या|तुला|वृश्चिक|धनु|मकर|कुम्भ|मीन).*?</h2>\s*\n\n([^\n<]{50,})',
-        r'\n\n([^\n<]{80,}(?:छ|छन्|हुनेछ|हुन्छ|मिल्नेछ|रहनेछ|पर्नेछ)[^\n<]{0,200})\n',
-    ]
 
-    for pat in patterns:
-        match = re.search(pat, html, re.DOTALL)
-        if match:
-            text = match.group(1).strip()
-            text = re.sub(r'<[^>]+>', '', text).strip()
-            if len(text) > 50:
-                break
+# ── Response builder ──────────────────────────────────────────────────────────
 
-    if not text:
-        np_blocks = re.findall(
-            r'(?<=>|\n)([^\n<]{60,}(?:छ|छन्|हुनेछ|हुन्छ|मिल्नेछ|रहनेछ)[^\n<]{0,300})(?=\n|<)',
-            html
-        )
-        skip = ["hamropatro", "Calendar", "Rashifal", "Features", "News", "वैशाख", "जेठ", "Login"]
-        for block in np_blocks:
-            if not any(s in block for s in skip) and len(block) > 60:
-                text = block.strip()
-                text = re.sub(r'<[^>]+>', '', text).strip()
-                break
+def build_response(rashi: str, period: str, ai_data: dict,
+                   bs_year: str, bs_date: str, is_premium: bool) -> dict:
+    info  = RASHI_INFO[rashi]
+    today = datetime.now()
 
-    # ── Extract lucky color ───────────────────────────────────────────────────
-    lucky_color = ""
-    lucky_number = ""
-    color_match = re.search(r'शुभ रंग\s+([^\s]+)\s+हो', html)
-    if color_match:
-        lucky_color = color_match.group(1).strip()
-
-    num_match = re.search(r'शुभ अंक\s+([^\s]+)\s+रहेको', html)
-    if num_match:
-        lucky_number = num_match.group(1).strip()
-
-    # Also look in plain text version
-    if not lucky_color:
-        color_match2 = re.search(r'शुभ रंग ([^\s।]+)', text)
-        if color_match2:
-            lucky_color = color_match2.group(1)
-    if not lucky_number:
-        num_match2 = re.search(r'शुभ अंक ([^\s।]+)', text)
-        if num_match2:
-            lucky_number = num_match2.group(1)
-
-    # ── Extract BS date from page ─────────────────────────────────────────────
-    bs_date = ""
-    date_match = re.search(r'([\d]+\s+[^\s]+\s+\d{4}\s+[^\s]+)\s+(?:को|मा)\s+राशिफल', html)
-    if date_match:
-        bs_date = date_match.group(1).strip()
-
-    result = {
-        "text":         text,
-        "lucky_color":  lucky_color,
-        "lucky_number": lucky_number,
-        "bs_date":      bs_date,
-        "source_url":   url,
+    resp = {
+        "rashi": rashi, "english": info["english"], "symbol": info["symbol"],
+        "element": info["element"], "color": info["color"],
+        "period": period, "is_premium": is_premium,
+        "date": {
+            "ad":  today.strftime("%Y-%m-%d"),
+            "day": today.strftime("%A"),
+            "bs":  bs_date,
+        },
+        "prediction": ai_data.get("prediction", ""),
+        "lucky": {
+            "color":  ai_data.get("lucky_color", ""),
+            "number": ai_data.get("lucky_number", ""),
+            "day":    ai_data.get("lucky_day", ""),
+            "month":  ai_data.get("lucky_month", ""),
+        },
     }
 
-    _cache[cache_key] = (time.time(), result)
-    return result
+    if period == "yearly":
+        resp["monthly_breakdown"] = ai_data.get("monthly_breakdown", {})
+        resp["career"]    = ai_data.get("career", "")
+        resp["love"]      = ai_data.get("love", "")
+        resp["health"]    = ai_data.get("health", "")
+        resp["education"] = ai_data.get("education", "")
+        resp["remedy"]    = ai_data.get("remedy", "")
+
+    if period == "monthly":
+        resp["career"] = ai_data.get("career", "")
+        resp["love"]   = ai_data.get("love", "")
+        resp["health"] = ai_data.get("health", "")
+
+    return resp
 
 
-def fetch_all_rashifal() -> dict:
-    """Fetch all 12 rashis at once from main page (more efficient)."""
-    today_str = datetime.now().strftime("%Y-%m-%d")
-    cache_key = ("all", "daily", today_str)
-
-    if cache_key in _cache:
-        cached_time, cached_data = _cache[cache_key]
-        if time.time() - cached_time < CACHE_TTL:
-            return cached_data
-
-    try:
-        req = urllib.request.Request(
-            "https://www.hamropatro.com/rashifal",
-            headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Accept": "text/html,application/xhtml+xml",
-                "Accept-Language": "ne,en;q=0.9",
-            }
-        )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            html = resp.read().decode("utf-8")
-    except Exception as e:
-        return {"error": str(e)}
-
-    # Extract per-rashi text from main page
-    # Pattern: link contains rashi slug, followed by Nepali text in same block
-    result = {}
-
-    slug_to_rashi = {v: k for k, v in RASHI_URL_MAP.items()}
-
-    # Find all rashi blocks: href="/rashifal/daily/Slug" ... text ... lucky info
-    rashi_blocks = re.findall(
-        r'href="/rashifal/daily/(\w+)"[^>]*>\s*###?\s*[^\n]*\n\n(.*?)(?=\[###|$)',
-        html, re.DOTALL
-    )
-
-    for slug, block in rashi_blocks:
-        rashi_name = slug_to_rashi.get(slug)
-        if not rashi_name:
-            continue
-        # Clean block
-        clean = re.sub(r'!\[.*?\]\(.*?\)', '', block)
-        clean = re.sub(r'\[.*?\]\(.*?\)', '', clean)
-        clean = re.sub(r'<[^>]+>', '', clean).strip()
-        # Remove lines that are just nav items
-        lines = [l.strip() for l in clean.split('\n') if len(l.strip()) > 40]
-        text = ' '.join(lines[:3]) if lines else ""
-
-        # Extract lucky info from block
-        color_m  = re.search(r'शुभ रंग\s+(\S+)\s+हो', block)
-        number_m = re.search(r'शुभ अंक\s+(\S+)\s+रहेको', block)
-
-        result[rashi_name] = {
-            "text":         text,
-            "lucky_color":  color_m.group(1)  if color_m  else "",
-            "lucky_number": number_m.group(1) if number_m else "",
-        }
-
-    _cache[cache_key] = (time.time(), result)
-    return result
-
-
-# ── API Routes ────────────────────────────────────────────────────────────────
+# ── Main route ────────────────────────────────────────────────────────────────
 
 @horoscope_bp.route("/", methods=["GET"])
 @jwt_required()
 def get_horoscope():
-    rashi  = request.args.get("rashi", "मेष").strip()
-    period = request.args.get("period", "daily").strip()
+    user_id = get_current_user_id()
+    rashi   = request.args.get("rashi",  "मेष").strip()
+    period  = request.args.get("period", "daily").strip()
 
     if rashi not in RASHI_URL_MAP:
         return jsonify({"error": f"'{rashi}' राशि फेला परेन।"}), 404
 
-    slug = RASHI_URL_MAP[rashi]
-    info = RASHI_INFO[rashi]
+    info    = RASHI_INFO[rashi]
+    today   = datetime.now()
+    bs_year = str(today.year + 57)
+    bs_date = f"वि.सं. {bs_year}"
 
-    data = fetch_hamropatro(slug, period)
+    premium_info = get_premium_status(user_id)
+    is_premium   = premium_info.get("premium", False)
 
-    if data.get("error") and not data.get("text"):
-        return jsonify({"error": f"HamroPatro बाट data fetch गर्न सकिएन: {data['error']}"}), 503
+    cache_key = make_cache_key(user_id, rashi, period, is_premium)
+    ttl       = CACHE_TTL_YEARLY if period == "yearly" else CACHE_TTL
 
-    today = datetime.now()
+    if cache_key in _cache:
+        cached_time, cached_data = _cache[cache_key]
+        if time.time() - cached_time < ttl:
+            return jsonify({"horoscope": cached_data}), 200
 
-    # ── Yearly response — richer data ──────────────────────────────────────────
-    if period == "yearly":
-        return jsonify({
-            "horoscope": {
-                "rashi":              rashi,
-                "english":            info["english"],
-                "symbol":             info["symbol"],
-                "element":            info["element"],
-                "color":              info["color"],
-                "period":             "yearly",
-                "date": {
-                    "ad":  today.strftime("%Y-%m-%d"),
-                    "day": today.strftime("%A"),
-                    "bs":  data.get("bs_date", ""),
-                },
-                "prediction":         data.get("text", ""),
-                "monthly_breakdown":  data.get("monthly_breakdown", {}),
-                "career":             data.get("career", ""),
-                "love":               data.get("love", ""),
-                "health":             data.get("health", ""),
-                "education":          data.get("education", ""),
-                "remedy":             data.get("remedy", ""),
-                "lucky": {
-                    "color":  data.get("lucky_color", ""),
-                    "number": data.get("lucky_number", ""),
-                    "day":    data.get("lucky_day", ""),
-                    "month":  data.get("lucky_month", ""),
-                },
-            }
-        }), 200
+    kundali_summary = ""
+    gochar_summary  = ""
+    if is_premium:
+        kundali_summary = build_kundali_summary(user_id)
+        gochar_summary  = build_gochar_summary(user_id)
 
-    # ── Daily / Weekly / Monthly response ────────────────────────────────────
-    return jsonify({
-        "horoscope": {
-            "rashi":          rashi,
-            "english":        info["english"],
-            "symbol":         info["symbol"],
-            "element":        info["element"],
-            "color":          info["color"],
-            "period":         period,
-            "date": {
-                "ad":  today.strftime("%Y-%m-%d"),
-                "day": today.strftime("%A"),
-                "bs":  data.get("bs_date", ""),
-            },
-            "prediction":     data["text"],
-            "lucky": {
-                "color":  data["lucky_color"],
-                "number": data["lucky_number"],
-            },
-        }
-    }), 200
+    prompt, max_tokens = build_prompt(
+        rashi, info["english"], period, bs_year,
+        kundali_summary, gochar_summary
+    )
+
+    try:
+        raw     = call_groq(prompt, max_tokens)
+        ai_data = parse_json(raw)
+    except Exception as e:
+        return jsonify({"error": f"राशिफल generate गर्न सकिएन: {str(e)}"}), 503
+
+    if "error" in ai_data and not ai_data.get("prediction"):
+        return jsonify({"error": "राशिफल generate गर्न सकिएन।"}), 503
+
+    horoscope = build_response(rashi, period, ai_data, bs_year, bs_date, is_premium)
+    _cache[cache_key] = (time.time(), horoscope)
+
+    return jsonify({"horoscope": horoscope}), 200
 
 
 @horoscope_bp.route("/all", methods=["GET"])
 @jwt_required()
 def get_all_horoscope():
-    """Get all 12 rashifal at once."""
-    all_data = fetch_all_rashifal()
+    today   = datetime.now()
+    bs_year = str(today.year + 57)
+    bs_date = f"वि.सं. {bs_year}"
+    result  = {}
 
-    if "error" in all_data:
-        return jsonify({"error": f"HamroPatro बाट data fetch गर्न सकिएन: {all_data['error']}"}), 503
+    for rashi, info in RASHI_INFO.items():
+        cache_key = make_cache_key(0, rashi, "daily", False)
+        if cache_key in _cache:
+            cached_time, cached_data = _cache[cache_key]
+            if time.time() - cached_time < CACHE_TTL:
+                result[rashi] = cached_data
+                continue
 
-    today = datetime.now()
-    result = {}
-
-    for rashi, data in all_data.items():
-        info = RASHI_INFO.get(rashi, {})
-        result[rashi] = {
-            "rashi":      rashi,
-            "english":    info.get("english", ""),
-            "symbol":     info.get("symbol", ""),
-            "color":      info.get("color", ""),
-            "prediction": data["text"],
-            "lucky": {
-                "color":  data["lucky_color"],
-                "number": data["lucky_number"],
-            },
-        }
+        try:
+            prompt, max_tokens = build_prompt(rashi, info["english"], "daily", bs_year)
+            raw       = call_groq(prompt, max_tokens)
+            ai_data   = parse_json(raw)
+            horoscope = build_response(rashi, "daily", ai_data, bs_year, bs_date, False)
+            _cache[cache_key] = (time.time(), horoscope)
+            result[rashi] = horoscope
+            time.sleep(2)  # rate limit avoid
+        except Exception:
+            result[rashi] = {"rashi": rashi, "prediction": "", "error": "fetch failed"}
 
     return jsonify({
-        "date": today.strftime("%Y-%m-%d"),
+        "date":       today.strftime("%Y-%m-%d"),
         "horoscopes": result,
     }), 200

@@ -1,0 +1,239 @@
+{
+  "home": {
+    "nav": {
+      "home": "Home"
+    },
+    "hero": {
+      "badge": "AI-Powered Vedic Astrology",
+      "title": "Discover Your",
+      "titleHighlight": "Cosmic Destiny",
+      "titleEnd": "",
+      "subtitle": "Unveil the mysteries of Vedic astrology with AI. Get personalized horoscopes, birth charts, and transit predictions using traditional Nepali planetary wisdom.",
+      "startReading": "Start Free Reading",
+      "viewHoroscope": "View Daily Horoscope"
+    },
+    "features": {
+      "title1": "Ancient Wisdom",
+      "title2": ", Modern Technology",
+      "subtitle": "Experience the perfect blend of traditional Vedic astrology and cutting-edge AI technology.",
+      "items": {
+        "kundali": {
+          "title": "Birth Chart",
+          "desc": "Get your complete birth chart analysis with detailed planetary positions based on Vedic astrology principles."
+        },
+        "gochar": {
+          "title": "Transit Analysis",
+          "desc": "Track planetary transits and understand how current celestial movements influence your life journey."
+        },
+        "horoscope": {
+          "title": "Daily Horoscope",
+          "desc": "Receive personalized daily predictions based on your birth chart and current planetary alignments."
+        },
+        "ai": {
+          "title": "AI Astrologer",
+          "desc": "Ask questions in Nepali or English and get instant astrological insights powered by advanced AI."
+        },
+        "dasha": {
+          "title": "Dasha Prediction",
+          "desc": "Understand your planetary periods and their influence on various aspects of your life."
+        },
+        "remedies": {
+          "title": "Remedies",
+          "desc": "Get personalized remedies including mantras, gemstones, and rituals to balance planetary energies."
+        }
+      }
+    },
+    "testimonials": {
+      "title1": "Trusted by ",
+      "title2": "Thousands",
+      "subtitle": "See what our users say about their cosmic journey.",
+      "items": [
+        {
+          "content": "The AI chatbot accurately predicted my career change! The birth chart analysis was very detailed and useful."
+        },
+        {
+          "content": "Finally, an astrology app using Nepali planet names! The transit predictions were accurate for business decisions."
+        },
+        {
+          "content": "The suggested remedies helped me overcome difficulties in my relationship. Highly recommend the Dasha analysis!"
+        }
+      ]
+    },
+    "cta": {
+      "badge": "Begin Your Cosmic Journey",
+      "title1": "Ready to Unveil ",
+      "title2": "Your Destiny",
+      "title3": "?",
+      "subtitle": "Join thousands of users who have discovered their cosmic path. Get your personalized Vedic astrology reading today.",
+      "button1": "Create Free Account",
+      "button2": "Try AI Astrologer"
+    },
+    "footer": {
+      "desc": "AI-powered Vedic astrology with traditional Nepali planetary wisdom.",
+      "features": "Features",
+      "company": "Company",
+      "legal": "Legal",
+      "copyright": "All rights reserved.",
+      "links": {
+        "kundali": "Birth Chart",
+        "gochar": "Transit Analysis",
+        "horoscope": "Daily Horoscope",
+        "chatbot": "AI Chatbot",
+        "about": "About Us",
+        "contact": "Contact",
+        "pricing": "Pricing",
+        "faq": "FAQ",
+        "privacy": "Privacy Policy",
+        "terms": "Terms of Service"
+      }
+    }
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "horoscope": "Horoscope",
+    "kundali": "Birth Chart",
+    "gochar": "Gochar",
+    "chatbot": "AI Chat",
+    "birthDetails": "Birth Details",
+    "premium": "Premium",
+    "contact": "Contact",
+    "settings": "Settings",
+    "logout": "Logout"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "welcome": "Welcome",
+    "subtitle": "Your cosmic journey continues",
+    "quickActions": {
+      "horoscopeDesc": "Personalized daily predictions",
+      "kundaliDesc": "View full birth chart",
+      "gocharDesc": "Track planetary transits",
+      "chatbotDesc": "Ask astrology questions"
+    },
+    "birthDetails": "Your Birth Details",
+    "currentDasha": "Current Dasha",
+    "currentDashaPeriod": "Current Dasha Period",
+    "mahadasha": "Mahadasha",
+    "nextMahadasha": "Next Mahadasha",
+    "dashaUnavailable": "Dasha data unavailable",
+    "kundaliUnavailable": "Kundali data unavailable",
+    "calculateKundali": "Calculate Kundali",
+    "viewFullKundali": "View Full Kundali",
+    "viewFullDasha": "Full Dasha Analysis",
+    "planetaryPositions": "Current Planetary Positions",
+    "viewGochar": "View Detailed Gochar",
+    "noBirthChart": "🔔 Birth chart not calculated — please fill in your birth details for full analysis.",
+    "rashi": "Rashi",
+    "nakshatra": "Nakshatra"
+  },
+  "horoscope": {
+    "title": "Horoscope",
+    "subtitle": "Daily Horoscope",
+    "generate": "View Horoscope",
+    "loading": "Preparing your horoscope...",
+    "noBirthData": "Birth details not found. Please enter your birth details first."
+  },
+  "kundali": {
+    "title": "Birth Chart",
+    "subtitle": "Birth Chart",
+    "generate": "Generate Kundali",
+    "loading": "Preparing your Kundali...",
+    "noBirthData": "Birth details not found. Please enter your birth details first."
+  },
+  "gochar": {
+    "title": "Gochar",
+    "subtitle": "Planetary Transits",
+    "generate": "View Gochar",
+    "loading": "Preparing Gochar...",
+    "noBirthData": "Birth details not found. Please enter your birth details first."
+  },
+  "chatbot": {
+    "title": "AI Chat",
+    "subtitle": "Ask astrology questions",
+    "placeholder": "Ask anything about astrology...",
+    "send": "Send",
+    "loading": "Thinking..."
+  },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Manage your account settings and preferences",
+    "profile": "Profile",
+    "preferences": "Preferences",
+    "dangerZone": "Danger Zone",
+    "fullName": "Full Name",
+    "email": "Email Address",
+    "saveProfile": "Save Profile",
+    "currentPassword": "Current Password",
+    "newPassword": "New Password",
+    "confirmPassword": "Confirm New Password",
+    "updatePassword": "Update Password",
+    "language": "Language",
+    "timezone": "Timezone",
+    "savePreferences": "Save Preferences",
+    "deleteAccount": "Delete My Account",
+    "deleteWarning": "Your account, all birth charts, chat history, and subscription data will be permanently deleted.",
+    "areYouSure": "Are you sure?",
+    "deleteConfirm": "This will permanently delete your account and all associated data.",
+    "cancel": "Cancel",
+    "yesDelete": "Yes, Delete My Account",
+    "deleteSuccessTitle": "Account Deleted Successfully",
+    "deleteSuccessMessage": "All your data has been permanently removed."
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "loading": "Loading...",
+    "error": "Something went wrong",
+    "success": "Saved successfully"
+  },
+  "auth": {
+    "login": "Login",
+    "signup": "Sign Up",
+    "logout": "Logout",
+    "email": "Email",
+    "password": "Password",
+    "fullName": "Full Name",
+    "forgotPassword": "Forgot password?"
+  },
+  "login": {
+    "title": "Welcome Back!",
+    "subtitle": "Login to continue your cosmic journey",
+    "noAccount": "Don't have an account?",
+    "signUp": "Sign Up",
+    "email": "Email",
+    "password": "Password",
+    "forgotPassword": "Forgot password?",
+    "signIn": "Login",
+    "signingIn": "Logging in...",
+    "fillFields": "Please fill in all fields",
+    "successTitle": "Login Successful! 🎉",
+    "successMessage": "Welcome! Taking you to your dashboard.",
+    "redirecting": "Redirecting to dashboard..."
+  },
+  "signup": {
+    "title": "Create Account",
+    "subtitle": "Begin your cosmic journey",
+    "hasAccount": "Already have an account?",
+    "signIn": "Login",
+    "fullName": "Full Name",
+    "fullNamePlaceholder": "Your full name",
+    "email": "Email",
+    "password": "Password",
+    "passwordPlaceholder": "At least 8 characters and one number",
+    "confirmPassword": "Confirm Password",
+    "terms": "I agree to the",
+    "termsLink": "Terms of Service",
+    "and": "and",
+    "privacyLink": "Privacy Policy",
+    "createAccount": "Create Account",
+    "creatingAccount": "Creating account...",
+    "fillFields": "Please fill in all fields",
+    "passwordLength": "Password must be at least 8 characters",
+    "passwordNumber": "Password must contain at least one number",
+    "passwordMatch": "Passwords do not match",
+    "agreeTerms": "Please agree to the terms",
+    "successTitle": "Signup Successful! 🎉",
+    "successMessage": "Your account has been created successfully. Start your cosmic journey!",
+    "goToLogin": "Go to Login"
+  }
+}

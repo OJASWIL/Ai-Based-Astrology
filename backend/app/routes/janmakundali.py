@@ -1,3 +1,6 @@
+from app.db import get_db
+import json
+import psycopg2.extras
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
 from app.models.birth_detail import BirthDetail
@@ -5,7 +8,7 @@ from app.models.janma_kundali import JanmaKundaliRecord
 from app.utils.token import get_current_user_id
 import ephem
 import math
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 janmakundali_bp = Blueprint("janmakundali", __name__)
 
@@ -22,8 +25,8 @@ NAKSHATRAS = [
     "शतभिषा", "पूर्व भाद्रपद", "उत्तर भाद्रपद", "रेवती"
 ]
 
-DASHA_PLANETS = ["केतु", "शुक्र", "सूर्य", "चन्द्र", "मङ्गल", "राहु", "बृहस्पति", "शनि", "बुध"]
-DASHA_YEARS   = [7, 20, 6, 10, 7, 18, 16, 19, 17]
+DASHA_PLANETS        = ["केतु", "शुक्र", "सूर्य", "चन्द्र", "मङ्गल", "राहु", "बृहस्पति", "शनि", "बुध"]
+DASHA_YEARS          = [7, 20, 6, 10, 7, 18, 16, 19, 17]
 NAKSHATRA_LORD_INDEX = [0, 1, 2, 3, 4, 5, 6, 7, 8] * 3
 
 PLANET_NP_MAP = {
@@ -41,18 +44,22 @@ PLANET_NP_MAP = {
 NEPAL_UTC_OFFSET = timedelta(hours=5, minutes=45)
 
 
+# ─────────────────────────────────────────────
+# Utility helpers
+# ─────────────────────────────────────────────
+
 def to_utc(local_dt: datetime) -> datetime:
     return local_dt - NEPAL_UTC_OFFSET
 
 
 def get_jd(utc_dt: datetime) -> float:
     ephem_date = ephem.Date(utc_dt.strftime("%Y/%m/%d %H:%M:%S"))
-    return float(ephem_date) + 2415020.0
+    return ephem.julian_date(ephem_date)
 
 
 def get_lahiri_ayanamsa(jd: float) -> float:
     T = (jd - 2451545.0) / 36525.0
-    return (23.8536 + T * 1.396041667) % 360
+    return (23.853056 + 1.3969722 * T) % 360
 
 
 def tropical_to_sidereal(tropical_lon: float, jd: float) -> float:
@@ -81,6 +88,10 @@ def get_nakshatra(moon_lon: float):
     return NAKSHATRAS[idx], pada, idx
 
 
+# ─────────────────────────────────────────────
+# Lagna (Ascendant)
+# ─────────────────────────────────────────────
+
 def compute_lagna(utc_dt: datetime, lat: float, lng: float, jd: float) -> float:
     obs          = ephem.Observer()
     obs.lat      = str(lat)
@@ -90,17 +101,18 @@ def compute_lagna(utc_dt: datetime, lat: float, lng: float, jd: float) -> float:
     obs.epoch    = ephem.J2000
 
     ramc_deg = math.degrees(float(obs.sidereal_time())) % 360
-    T        = (jd - 2451545.0) / 36525.0
-    eps      = 23.4392911 - 0.0130042 * T
+
+    T       = (jd - 2451545.0) / 36525.0
+    eps     = 23.4392911 - 0.0130042 * T
 
     lat_rad  = math.radians(lat)
     eps_rad  = math.radians(eps)
     ramc_rad = math.radians(ramc_deg)
 
-    num = -math.cos(ramc_rad)
-    den = math.sin(eps_rad) * math.tan(lat_rad) + math.cos(eps_rad) * math.sin(ramc_rad)
+    y = -math.cos(ramc_rad)
+    x =  math.sin(eps_rad) * math.tan(lat_rad) + math.cos(eps_rad) * math.sin(ramc_rad)
 
-    asc_tropical = math.degrees(math.atan2(num, den)) % 360
+    asc_tropical = math.degrees(math.atan2(y, x)) % 360
 
     mc_tropical = math.degrees(math.atan2(
         math.sin(ramc_rad),
@@ -108,11 +120,15 @@ def compute_lagna(utc_dt: datetime, lat: float, lng: float, jd: float) -> float:
     )) % 360
 
     diff = (asc_tropical - mc_tropical) % 360
-    if 90 <= diff <= 270:
+    if diff > 180:
         asc_tropical = (asc_tropical + 180) % 360
 
     return tropical_to_sidereal(asc_tropical, jd)
 
+
+# ─────────────────────────────────────────────
+# Planetary positions
+# ─────────────────────────────────────────────
 
 def compute_planets(utc_dt: datetime, lat: float, lng: float, jd: float) -> dict:
     obs          = ephem.Observer()
@@ -134,20 +150,26 @@ def compute_planets(utc_dt: datetime, lat: float, lng: float, jd: float) -> dict
 
     result = {}
     for name, body in body_map.items():
-        ecl  = ephem.Ecliptic(body, epoch=ephem.J2000)
+        ecl  = ephem.Ecliptic(body, epoch=obs.date)
         trop = math.degrees(ecl.lon) % 360
         result[name] = tropical_to_sidereal(trop, jd)
 
+    # Rahu (Mean Node)
     j2000_ephem      = ephem.Date("2000/1/1 12:00:00")
-    days_since_j2000 = (
-        float(ephem.Date(utc_dt.strftime("%Y/%m/%d %H:%M:%S"))) - float(j2000_ephem)
-    )
+    days_since_j2000 = float(
+        ephem.Date(utc_dt.strftime("%Y/%m/%d %H:%M:%S"))
+    ) - float(j2000_ephem)
+
     rahu_trop      = (125.04452 - 0.05295376 * days_since_j2000) % 360
     result["Rahu"] = tropical_to_sidereal(rahu_trop, jd)
     result["Ketu"] = (result["Rahu"] + 180) % 360
 
     return result
 
+
+# ─────────────────────────────────────────────
+# House assignment
+# ─────────────────────────────────────────────
 
 def assign_to_houses(lagna_lon: float, planet_lons: dict) -> list:
     lagna_sign = get_sign_index(lagna_lon)
@@ -170,6 +192,10 @@ def assign_to_houses(lagna_lon: float, planet_lons: dict) -> list:
 
     return houses
 
+
+# ─────────────────────────────────────────────
+# Vimshottari Dasha
+# ─────────────────────────────────────────────
 
 def compute_dasha(moon_lon: float, birth_dt: datetime) -> list:
     _, _, nak_idx = get_nakshatra(moon_lon)
@@ -208,6 +234,10 @@ def compute_dasha(moon_lon: float, birth_dt: datetime) -> list:
     return dashas
 
 
+# ─────────────────────────────────────────────
+# Yoga detection
+# ─────────────────────────────────────────────
+
 def detect_yogas(houses: list, planet_lons: dict) -> list:
     yogas = []
 
@@ -227,63 +257,78 @@ def detect_yogas(houses: list, planet_lons: dict) -> list:
     sat_h  = house_of("Saturn")
 
     if jup_h and moon_h and (jup_h - moon_h) % 12 in (0, 3, 6, 9):
-        yogas.append({"name": "गजकेसरी योग",
-                      "desc": "चन्द्रबाट केन्द्रमा बृहस्पति — ज्ञान, सम्पत्ति र मान्यता प्राप्त हुन्छ।",
-                      "strength": "बलियो"})
+        yogas.append({
+            "name":     "गजकेसरी योग",
+            "desc":     "चन्द्रबाट केन्द्रमा बृहस्पति — ज्ञान, सम्पत्ति र मान्यता प्राप्त हुन्छ।",
+            "strength": "बलियो"
+        })
 
     if sun_h and mer_h and sun_h == mer_h:
-        yogas.append({"name": "बुधआदित्य योग",
-                      "desc": "सूर्य र बुधको संयोग — बुद्धि र सञ्चार क्षमता बढाउँछ।",
-                      "strength": "मध्यम"})
+        yogas.append({
+            "name":     "बुधआदित्य योग",
+            "desc":     "सूर्य र बुधको संयोग — बुद्धि र सञ्चार क्षमता बढाउँछ।",
+            "strength": "मध्यम"
+        })
 
     if moon_h and mar_h and moon_h == mar_h:
-        yogas.append({"name": "चन्द्र-मङ्गल योग",
-                      "desc": "चन्द्र र मङ्गलको संयोग — ऊर्जा, महत्वाकांक्षा र आर्थिक लाभ दिन्छ।",
-                      "strength": "मध्यम"})
+        yogas.append({
+            "name":     "चन्द्र-मङ्गल योग",
+            "desc":     "चन्द्र र मङ्गलको संयोग — ऊर्जा, महत्वाकांक्षा र आर्थिक लाभ दिन्छ।",
+            "strength": "मध्यम"
+        })
 
     if ven_h and moon_h and ven_h == moon_h:
-        yogas.append({"name": "शुक्र-चन्द्र योग",
-                      "desc": "शुक्र र चन्द्रको संयोग — सौन्दर्य, सृजनशीलता र आकर्षण दिन्छ।",
-                      "strength": "मध्यम"})
+        yogas.append({
+            "name":     "शुक्र-चन्द्र योग",
+            "desc":     "शुक्र र चन्द्रको संयोग — सौन्दर्य, सृजनशीलता र आकर्षण दिन्छ।",
+            "strength": "मध्यम"
+        })
 
     if sat_h in (1, 4, 7, 10) and get_sign_index(planet_lons["Saturn"]) in (6, 9, 10):
-        yogas.append({"name": "शश योग",
-                      "desc": "केन्द्रमा बलियो शनि — अधिकार, अनुशासन र दीर्घायु दिन्छ।",
-                      "strength": "बलियो"})
+        yogas.append({
+            "name":     "शश योग",
+            "desc":     "केन्द्रमा बलियो शनि — अधिकार, अनुशासन र दीर्घायु दिन्छ।",
+            "strength": "बलियो"
+        })
 
     if jup_h in (1, 4, 7, 10) and get_sign_index(planet_lons["Jupiter"]) in (3, 8, 11):
-        yogas.append({"name": "हंस योग",
-                      "desc": "केन्द्रमा बलियो बृहस्पति — ज्ञान, अध्यात्म र समृद्धि दिन्छ।",
-                      "strength": "बलियो"})
+        yogas.append({
+            "name":     "हंस योग",
+            "desc":     "केन्द्रमा बलियो बृहस्पति — ज्ञान, अध्यात्म र समृद्धि दिन्छ।",
+            "strength": "बलियो"
+        })
 
     if mar_h in (1, 4, 7, 10) and get_sign_index(planet_lons["Mars"]) in (0, 7, 9):
-        yogas.append({"name": "रुचक योग",
-                      "desc": "केन्द्रमा बलियो मङ्गल — साहस, नेतृत्व र शारीरिक बल दिन्छ।",
-                      "strength": "बलियो"})
+        yogas.append({
+            "name":     "रुचक योग",
+            "desc":     "केन्द्रमा बलियो मङ्गल — साहस, नेतृत्व र शारीरिक बल दिन्छ।",
+            "strength": "बलियो"
+        })
 
     if ven_h in (1, 4, 7, 10) and get_sign_index(planet_lons["Venus"]) in (1, 6, 11):
-        yogas.append({"name": "मालव्य योग",
-                      "desc": "केन्द्रमा बलियो शुक्र — विलासिता, सौन्दर्य र भौतिक सुख दिन्छ।",
-                      "strength": "बलियो"})
+        yogas.append({
+            "name":     "मालव्य योग",
+            "desc":     "केन्द्रमा बलियो शुक्र — विलासिता, सौन्दर्य र भौतिक सुख दिन्छ।",
+            "strength": "बलियो"
+        })
 
     return yogas
 
 
+# ─────────────────────────────────────────────
+# Cache helpers
+# ─────────────────────────────────────────────
+
 def _birth_details_changed(detail, saved: JanmaKundaliRecord) -> bool:
-    """
-    Return True if birth details were updated AFTER the kundali was last calculated.
-    This ensures every change in birth details triggers a fresh calculation.
-    """
     if saved is None:
         return True
 
-    detail_updated = getattr(detail, "updated_at", None)
-    kundali_calculated = getattr(saved, "calculated_at", None)
+    detail_updated     = getattr(detail, "updated_at", None)
+    kundali_calculated = getattr(saved,  "calculated_at", None)
 
     if detail_updated is None or kundali_calculated is None:
         return True
 
-    # Make both timezone-naive for safe comparison
     if hasattr(detail_updated, "tzinfo") and detail_updated.tzinfo is not None:
         detail_updated = detail_updated.replace(tzinfo=None)
     if hasattr(kundali_calculated, "tzinfo") and kundali_calculated.tzinfo is not None:
@@ -292,8 +337,11 @@ def _birth_details_changed(detail, saved: JanmaKundaliRecord) -> bool:
     return detail_updated > kundali_calculated
 
 
+# ─────────────────────────────────────────────
+# Core calculation
+# ─────────────────────────────────────────────
+
 def _do_calculate(detail) -> dict:
-    """Pure calculation — returns kundali_data dict."""
     birth_time_str = str(detail.birth_time)[:5]
     local_dt = datetime.strptime(
         f"{detail.birth_date} {birth_time_str}", "%Y-%m-%d %H:%M"
@@ -304,11 +352,11 @@ def _do_calculate(detail) -> dict:
     lng = float(detail.longitude)
     jd  = get_jd(utc_dt)
 
-    lagna_lon   = compute_lagna(utc_dt, lat, lng, jd)
-    planet_lons = compute_planets(utc_dt, lat, lng, jd)
-    houses      = assign_to_houses(lagna_lon, planet_lons)
-    dashas      = compute_dasha(planet_lons["Moon"], local_dt)
-    yogas       = detect_yogas(houses, planet_lons)
+    lagna_lon    = compute_lagna(utc_dt, lat, lng, jd)
+    planet_lons  = compute_planets(utc_dt, lat, lng, jd)
+    houses       = assign_to_houses(lagna_lon, planet_lons)
+    dashas       = compute_dasha(planet_lons["Moon"], local_dt)
+    yogas        = detect_yogas(houses, planet_lons)
     nak, pada, _ = get_nakshatra(planet_lons["Moon"])
     lagna_sign_idx = get_sign_index(lagna_lon)
 
@@ -340,6 +388,10 @@ def _do_calculate(detail) -> dict:
     }
 
 
+# ─────────────────────────────────────────────
+# Routes
+# ─────────────────────────────────────────────
+
 @janmakundali_bp.route("/", methods=["GET"])
 @jwt_required()
 def get_kundali():
@@ -348,6 +400,16 @@ def get_kundali():
 
     if not detail:
         return jsonify({"error": "जन्म विवरण फेला परेन। कृपया पहिले जन्म विवरण भर्नुहोस्।"}), 404
+
+    # ── Future date validation ──────────────────────────────────────────
+    try:
+        birth_date_obj = datetime.strptime(str(detail.birth_date), "%Y-%m-%d").date()
+    except ValueError:
+        return jsonify({"error": "जन्म मिति अमान्य छ।"}), 400
+
+    if birth_date_obj > date.today():
+        return jsonify({"error": "FUTURE_DATE"}), 400
+    # ───────────────────────────────────────────────────────────────────
 
     record_uid = getattr(detail, "user_id", None)
     if record_uid is not None and str(record_uid) != str(user_id):
@@ -362,30 +424,24 @@ def get_kundali():
         "longitude":   float(detail.longitude),
     }
 
-    # ── Step 1: Check DB cache ─────────────────────────────────────────────
     recalculate = request.args.get("recalculate", "false").lower() == "true"
     saved       = JanmaKundaliRecord.find_by_user(user_id)
 
-    # Use cache ONLY if:
-    # 1. recalculate flag is NOT set
-    # 2. cached record exists
-    # 3. birth details have NOT changed since last calculation
     if not recalculate and saved and not _birth_details_changed(detail, saved):
         return jsonify({"kundali": saved.to_kundali_dict(birth_info)}), 200
 
-    # ── Step 2: Calculate fresh ────────────────────────────────────────────
     try:
         kundali_data = _do_calculate(detail)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-    # ── Step 3: Save to DB ─────────────────────────────────────────────────
     try:
         JanmaKundaliRecord.upsert(user_id, kundali_data)
     except Exception as e:
-        # Don't block response if save fails — still return calculated data
-        return jsonify({"kundali": {"birth_info": birth_info, **kundali_data},
-                        "warning": f"DB save failed: {str(e)}"}), 200
+        return jsonify({
+            "kundali": {"birth_info": birth_info, **kundali_data},
+            "warning": f"DB save failed: {str(e)}"
+        }), 200
 
     return jsonify({"kundali": {"birth_info": birth_info, **kundali_data}}), 200
 
@@ -402,24 +458,24 @@ def debug_kundali():
     record_uid = getattr(detail, "user_id", "N/A")
     saved      = JanmaKundaliRecord.find_by_user(user_id)
 
-    detail_updated    = getattr(detail, "updated_at", None)
-    kundali_calc      = getattr(saved, "calculated_at", None) if saved else None
-    needs_recalculate = _birth_details_changed(detail, saved)
+    detail_updated = getattr(detail, "updated_at", None)
+    kundali_calc   = getattr(saved, "calculated_at", None) if saved else None
+    needs_recalc   = _birth_details_changed(detail, saved)
 
     return jsonify({
         "debug": {
-            "authenticated_user_id":  user_id,
-            "record_user_id":         record_uid,
-            "full_name":              detail.full_name,
-            "birth_date":             str(detail.birth_date),
-            "birth_time":             str(detail.birth_time)[:5],
-            "birth_place":            detail.birth_place,
-            "latitude":               str(detail.latitude),
-            "longitude":              str(detail.longitude),
-            "ownership_match":        str(record_uid) == str(user_id),
-            "kundali_cached":         saved is not None,
-            "kundali_calculated_at":  kundali_calc.isoformat() if kundali_calc else None,
+            "authenticated_user_id":    user_id,
+            "record_user_id":           record_uid,
+            "full_name":                detail.full_name,
+            "birth_date":               str(detail.birth_date),
+            "birth_time":               str(detail.birth_time)[:5],
+            "birth_place":              detail.birth_place,
+            "latitude":                 str(detail.latitude),
+            "longitude":                str(detail.longitude),
+            "ownership_match":          str(record_uid) == str(user_id),
+            "kundali_cached":           saved is not None,
+            "kundali_calculated_at":    kundali_calc.isoformat() if kundali_calc else None,
             "birth_details_updated_at": detail_updated.isoformat() if detail_updated else None,
-            "needs_recalculate":      needs_recalculate,
+            "needs_recalculate":        needs_recalc,
         }
     }), 200
