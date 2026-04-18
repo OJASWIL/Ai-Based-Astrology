@@ -1,0 +1,6 @@
+# Environment files
+backend/.env
+frontend/.env
+frontend/.env.local
+**/.env
+**/.env.local
