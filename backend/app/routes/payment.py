@@ -1,5 +1,3 @@
-# app/routes/payment.py
-
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
 from app.utils.token import get_current_user_id
@@ -21,10 +19,24 @@ PLAN_DAYS = {
 }
 
 
+def normalize_plan_name(name: str) -> str:
+    """Normalize plan name to consistent casing."""
+    if not name:
+        return "Premium"
+    lower = name.lower()
+    if "annual" in lower:
+        return "Annual"
+    elif "premium" in lower:
+        return "Premium"
+    return name.capitalize()
+
+
 def save_payment_and_activate(user_id: int, tx_uuid: str, ref_id: str,
                                product_code: str, plan_name: str, amount: float):
-    conn       = get_db()
-    cur        = conn.cursor()
+    conn     = get_db()
+    cur      = conn.cursor()
+    # Normalize before saving so DB always has consistent casing
+    plan_name  = normalize_plan_name(plan_name)
     plan_key   = plan_name.lower()
     days       = PLAN_DAYS.get(plan_key, 30)
     expires_at = datetime.utcnow() + timedelta(days=days)
@@ -87,7 +99,9 @@ def get_premium_status(user_id: int) -> dict:
         (user_id,),
     )
     payment_row = cur.fetchone()
-    plan_name = payment_row["plan_name"] if payment_row else "Premium"
+    # ✅ Normalize plan name so Annual/Premium always match correctly
+    raw_plan  = payment_row["plan_name"] if payment_row else "Premium"
+    plan_name = normalize_plan_name(raw_plan)
 
     cur.close()
     return {
@@ -151,7 +165,7 @@ def verify_payment():
     return jsonify({
         "success":    True,
         "message":    "Payment verified and premium activated!",
-        "plan":       plan_name,
+        "plan":       normalize_plan_name(plan_name),
         "expires_at": expires_at.isoformat(),
         "transaction": {
             "transaction_uuid": verify_data.get("transaction_uuid"),
@@ -182,6 +196,8 @@ def payment_history():
     for r in cur.fetchall():
         r = dict(r)
         r["created_at"] = r["created_at"].isoformat() if r.get("created_at") else None
+        # ✅ Normalize plan name in history too
+        r["plan_name"]  = normalize_plan_name(r.get("plan_name", ""))
         rows.append(r)
 
     cur.close()

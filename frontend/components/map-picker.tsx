@@ -1,16 +1,10 @@
 "use client"
 
-// Place this file at: components/map-picker.tsx
-// This component is always imported via dynamic() with ssr:false
-// so it is safe to use browser-only Leaflet APIs here.
-
 import { useEffect } from "react"
 import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from "react-leaflet"
 import L from "leaflet"
 import "leaflet/dist/leaflet.css"
 
-// Fix Leaflet's broken default icon paths under webpack / Next.js
-// Must run once before any map renders.
 ;(function fixLeafletIcons() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   delete (L.Icon.Default.prototype as any)._getIconUrl
@@ -21,7 +15,6 @@ import "leaflet/dist/leaflet.css"
   })
 })()
 
-// ── Click anywhere on the map → call onMove ───────────────────────────────
 function ClickHandler({ onMove }: { onMove: (lat: number, lng: number) => void }) {
   useMapEvents({
     click(e) {
@@ -34,19 +27,23 @@ function ClickHandler({ onMove }: { onMove: (lat: number, lng: number) => void }
   return null
 }
 
-// ── Fly to new centre whenever lat/lng props change ────────────────────────
+// ✅ FIX: _loaded check + try/catch le unmount error rokxa
 function FlyTo({ lat, lng }: { lat: number; lng: number }) {
   const map = useMap()
   useEffect(() => {
-    map.flyTo([lat, lng], map.getZoom() < 8 ? 8 : map.getZoom(), {
-      animate: true,
-      duration: 0.7,
-    })
-  }, [lat, lng])   // eslint-disable-line react-hooks/exhaustive-deps
+    try {
+      if (!map || !(map as any)._loaded) return
+      map.flyTo([lat, lng], map.getZoom() < 8 ? 8 : map.getZoom(), {
+        animate: true,
+        duration: 0.7,
+      })
+    } catch {
+      // map unmount bhaisako — ignore
+    }
+  }, [lat, lng]) // eslint-disable-line react-hooks/exhaustive-deps
   return null
 }
 
-// ── Main export ────────────────────────────────────────────────────────────
 export interface MapPickerProps {
   lat: number
   lng: number
@@ -71,14 +68,8 @@ export default function MapPicker({ lat, lng, label, onMove }: MapPickerProps) {
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           maxZoom={18}
         />
-
-        {/* Fly to new location when district changes */}
         <FlyTo lat={safeLat} lng={safeLng} />
-
-        {/* Map click handler */}
         <ClickHandler onMove={onMove} />
-
-        {/* Draggable marker */}
         <Marker
           position={[safeLat, safeLng]}
           draggable
@@ -94,14 +85,12 @@ export default function MapPicker({ lat, lng, label, onMove }: MapPickerProps) {
         />
       </MapContainer>
 
-      {/* Floating district label */}
       {label && (
         <div className="absolute top-2 left-2 z-[1000] bg-card/90 backdrop-blur-sm border border-border rounded-md px-2 py-1 flex items-center gap-1.5 text-xs font-medium text-primary pointer-events-none">
           📍 {label}
         </div>
       )}
 
-      {/* Floating coordinates */}
       <div className="absolute bottom-2 right-2 z-[1000] bg-card/80 backdrop-blur-sm border border-border rounded px-2 py-0.5 text-xs text-muted-foreground pointer-events-none select-none">
         {safeLat.toFixed(4)}, {safeLng.toFixed(4)}
       </div>

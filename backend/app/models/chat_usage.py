@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import datetime
 from app.db import get_db
 
 FREE_LIMIT = 10
@@ -19,6 +19,41 @@ class ChatUsage:
         return row["count"] if row else 0
 
     @staticmethod
+    def is_premium(user_id: int) -> bool:
+        """Check subscription from user_premium table."""
+        try:
+            conn = get_db()
+            cur  = conn.cursor()
+            cur.execute("""
+                SELECT is_premium, premium_expires_at 
+                FROM user_premium 
+                WHERE user_id = %s
+            """, (user_id,))
+            row = cur.fetchone()
+            cur.close()
+
+            if not row or not row["is_premium"]:
+                return False
+
+            # Check if subscription has expired
+            if row["premium_expires_at"]:
+                if datetime.utcnow() > row["premium_expires_at"]:
+                    # Auto-mark expired in DB
+                    conn2 = get_db()
+                    cur2  = conn2.cursor()
+                    cur2.execute(
+                        "UPDATE user_premium SET is_premium = FALSE WHERE user_id = %s",
+                        (user_id,)
+                    )
+                    conn2.commit()
+                    cur2.close()
+                    return False
+
+            return True
+        except Exception:
+            return False
+
+    @staticmethod
     def increment(user_id: int) -> int:
         """Increment count and return new count."""
         conn = get_db()
@@ -34,20 +69,6 @@ class ChatUsage:
         conn.commit()
         cur.close()
         return row["count"] if row else 1
-
-    @staticmethod
-    def is_premium(user_id: int) -> bool:
-        """Check subscription — hook into payments table."""
-        try:
-            conn = get_db()
-            cur  = conn.cursor()
-            # TODO: replace with your actual subscriptions table check
-            # cur.execute("SELECT 1 FROM subscriptions WHERE user_id=%s AND active=TRUE", (user_id,))
-            # return cur.fetchone() is not None
-            cur.close()
-            return False
-        except Exception:
-            return False
 
     @staticmethod
     def can_chat(user_id: int) -> tuple[bool, int, int]:
