@@ -1,376 +1,301 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
-from app.utils.token import get_current_user_id
-from app.models.janma_kundali import JanmaKundaliRecord
-from app.models.birth_detail import BirthDetail
-from app.routes.payment import get_premium_status
-from app.routes.gochar import _do_calculate
-import urllib.request
-import json
-import re
-from datetime import datetime, date
-import time
-import os
+import urllib.request, json, time, os
+from datetime import datetime
 
 horoscope_bp = Blueprint("horoscope", __name__)
 
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY_Horoscope", "")  
-GROQ_MODEL   = "llama-3.1-8b-instant"                        
+FREE_HOROSCOPE_API_BASE = "https://freehoroscopeapi.com/api/v1/get-horoscope"
 
-# ── Rashi mappings ────────────────────────────────────────────────────────────
-RASHI_URL_MAP = {
-    "मेष": "Mesh", "वृष": "Brish", "मिथुन": "Mithun", "कर्कट": "Karkat",
-    "सिंह": "Singha", "कन्या": "Kanya", "तुला": "Tula", "वृश्चिक": "Brischik",
-    "धनु": "Dhanu", "मकर": "Makar", "कुम्भ": "Kumbha", "मीन": "Meen",
+# ─── Nepali → English zodiac mapping ───────────────────────────────────────────
+RASHI_ZODIAC_MAP = {
+    "मेष":      "aries",
+    "वृष":      "taurus",
+    "मिथुन":   "gemini",
+    "कर्कट":   "cancer",
+    "सिंह":    "leo",
+    "कन्या":   "virgo",
+    "तुला":    "libra",
+    "वृश्चिक": "scorpio",
+    "धनु":     "sagittarius",
+    "मकर":     "capricorn",
+    "कुम्भ":   "aquarius",
+    "मीन":     "pisces",
 }
 
+# ─── Full rashi metadata ────────────────────────────────────────────────────────
 RASHI_INFO = {
-    "मेष":      {"english": "Aries",       "symbol": "♈", "element": "Fire",  "color": "#ef4444"},
-    "वृष":      {"english": "Taurus",      "symbol": "♉", "element": "Earth", "color": "#84cc16"},
-    "मिथुन":   {"english": "Gemini",      "symbol": "♊", "element": "Air",   "color": "#f59e0b"},
-    "कर्कट":   {"english": "Cancer",      "symbol": "♋", "element": "Water", "color": "#06b6d4"},
-    "सिंह":    {"english": "Leo",         "symbol": "♌", "element": "Fire",  "color": "#f97316"},
-    "कन्या":   {"english": "Virgo",       "symbol": "♍", "element": "Earth", "color": "#22c55e"},
-    "तुला":    {"english": "Libra",       "symbol": "♎", "element": "Air",   "color": "#ec4899"},
-    "वृश्चिक": {"english": "Scorpio",     "symbol": "♏", "element": "Water", "color": "#dc2626"},
-    "धनु":     {"english": "Sagittarius", "symbol": "♐", "element": "Fire",  "color": "#8b5cf6"},
-    "मकर":     {"english": "Capricorn",   "symbol": "♑", "element": "Earth", "color": "#6366f1"},
-    "कुम्भ":   {"english": "Aquarius",    "symbol": "♒", "element": "Air",   "color": "#3b82f6"},
-    "मीन":     {"english": "Pisces",      "symbol": "♓", "element": "Water", "color": "#14b8a6"},
+    "मेष": {
+        "english": "Aries",       "symbol": "♈",
+        "element": "Fire",        "color": "#ef4444",
+        "dates": "Mar 21 – Apr 19",
+    },
+    "वृष": {
+        "english": "Taurus",      "symbol": "♉",
+        "element": "Earth",       "color": "#84cc16",
+        "dates": "Apr 20 – May 20",
+    },
+    "मिथुन": {
+        "english": "Gemini",      "symbol": "♊",
+        "element": "Air",         "color": "#f59e0b",
+        "dates": "May 21 – Jun 20",
+    },
+    "कर्कट": {
+        "english": "Cancer",      "symbol": "♋",
+        "element": "Water",       "color": "#06b6d4",
+        "dates": "Jun 21 – Jul 22",
+    },
+    "सिंह": {
+        "english": "Leo",         "symbol": "♌",
+        "element": "Fire",        "color": "#f97316",
+        "dates": "Jul 23 – Aug 22",
+    },
+    "कन्या": {
+        "english": "Virgo",       "symbol": "♍",
+        "element": "Earth",       "color": "#22c55e",
+        "dates": "Aug 23 – Sep 22",
+    },
+    "तुला": {
+        "english": "Libra",       "symbol": "♎",
+        "element": "Air",         "color": "#ec4899",
+        "dates": "Sep 23 – Oct 22",
+    },
+    "वृश्चिक": {
+        "english": "Scorpio",     "symbol": "♏",
+        "element": "Water",       "color": "#dc2626",
+        "dates": "Oct 23 – Nov 21",
+    },
+    "धनु": {
+        "english": "Sagittarius", "symbol": "♐",
+        "element": "Fire",        "color": "#8b5cf6",
+        "dates": "Nov 22 – Dec 21",
+    },
+    "मकर": {
+        "english": "Capricorn",   "symbol": "♑",
+        "element": "Earth",       "color": "#6366f1",
+        "dates": "Dec 22 – Jan 19",
+    },
+    "कुम्भ": {
+        "english": "Aquarius",    "symbol": "♒",
+        "element": "Air",         "color": "#3b82f6",
+        "dates": "Jan 20 – Feb 18",
+    },
+    "मीन": {
+        "english": "Pisces",      "symbol": "♓",
+        "element": "Water",       "color": "#14b8a6",
+        "dates": "Feb 19 – Mar 20",
+    },
 }
 
+# ─── Valid periods ──────────────────────────────────────────────────────────────
+VALID_PERIODS = {"daily", "weekly", "monthly"}
+
+# ─── Simple in-memory cache ─────────────────────────────────────────────────────
 _cache: dict = {}
-CACHE_TTL        = 3600
-CACHE_TTL_YEARLY = 86400
+
+# TTL per period type (seconds)
+CACHE_TTL = {
+    "daily":   3600,       # 1 hour
+    "weekly":  86400,      # 24 hours
+    "monthly": 86400 * 3,  # 3 days
+}
 
 
-# ── Groq API helper ───────────────────────────────────────────────────────────
-
-def call_groq(prompt: str, max_tokens: int = 2000, retries: int = 3) -> str:
-    for attempt in range(retries):
-        try:
-            payload = json.dumps({
-                "model": GROQ_MODEL,  # llama-3.1-8b-instant
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": max_tokens
-            }).encode("utf-8")
-
-            req = urllib.request.Request(
-                "https://api.groq.com/openai/v1/chat/completions",
-                data=payload,
-                headers={
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {GROQ_API_KEY}"
-                },
-                method="POST"
-            )
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                body = json.loads(resp.read().decode("utf-8"))
-            raw = body["choices"][0]["message"]["content"].strip()
-            raw = re.sub(r"^```(?:json)?\s*", "", raw)
-            raw = re.sub(r"\s*```$",          "", raw)
-            return raw
-
-        except urllib.error.HTTPError as e:
-            if e.code == 429 and attempt < retries - 1:
-                time.sleep(2 ** attempt)  # 1s → 2s → 4s
-                continue
-            raise
+def _cache_get(key: str, period: str):
+    entry = _cache.get(key)
+    ttl   = CACHE_TTL.get(period, 3600)
+    if entry and (time.time() - entry["ts"]) < ttl:
+        return entry["data"]
+    return None
 
 
-def parse_json(raw: str) -> dict:
-    try:
-        return json.loads(raw)
-    except Exception:
-        return {"error": "JSON parse failed"}
+def _cache_set(key: str, data):
+    _cache[key] = {"ts": time.time(), "data": data}
 
 
-# ── Kundali summary ───────────────────────────────────────────────────────────
-
-def build_kundali_summary(user_id: int) -> str:
-    try:
-        record = JanmaKundaliRecord.find_by_user(user_id)
-        detail = BirthDetail.find_by_user(user_id)
-        if not record or not detail:
-            return ""
-
-        current_dasha = ""
-        if record.dasha:
-            for d in record.dasha:
-                if d.get("current"):
-                    current_dasha = d.get("planet_np", "")
-                    break
-
-        planet_lines = []
-        if record.planetary_positions:
-            for p in record.planetary_positions[:5]:
-                planet_lines.append(f"{p.get('planet_np')} {p.get('sign_np')} मा")
-
-        yoga_names = []
-        if record.yogas:
-            yoga_names = [y.get("name", "") for y in record.yogas[:3]]
-
-        return f"""जन्म विवरण:
-- जन्म मिति: {detail.birth_date}
-- जन्म समय: {str(detail.birth_time)[:5]}
-- जन्म स्थान: {detail.birth_place}
-- लग्न: {record.lagna_sign_np}
-- राशि: {record.rashi_sign_np}
-- नक्षत्र: {record.nakshatra} (पाद {record.nakshatra_pada})
-- वर्तमान महादशा: {current_dasha}
-- ग्रह स्थिति: {', '.join(planet_lines)}
-- योगहरू: {', '.join(yoga_names) if yoga_names else 'सामान्य'}"""
-    except Exception:
-        return ""
+# ─── BS date helper ─────────────────────────────────────────────────────────────
+def get_bs_date() -> str:
+    today   = datetime.now()
+    bs_year = today.year + 57
+    return f"वि.सं. {bs_year}, {today.strftime('%B %d')}"
 
 
-# ── Gochar summary ────────────────────────────────────────────────────────────
+# ─── Fetch from freehoroscopeapi.com ───────────────────────────────────────────
+def fetch_free_horoscope(zodiac_en: str, period: str) -> dict:
+    """
+    Fetch horoscope from freehoroscopeapi.com.
+    period must be one of: daily | weekly | monthly
+    """
+    today     = datetime.now()
+    cache_key = f"{zodiac_en}:{period}:{today.strftime('%Y-%m-%d')}"
+    cached    = _cache_get(cache_key, period)
+    if cached:
+        return cached
 
-def build_gochar_summary(user_id: int) -> str:
-    try:
-        detail = BirthDetail.find_by_user(user_id)
-        if not detail:
-            return ""
+    url = f"{FREE_HOROSCOPE_API_BASE}/{period}?sign={zodiac_en}"
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0",
+            "Accept":     "application/json",
+        }
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
 
-        gochar_data     = _do_calculate(detail, language="nepali")
-        transit_details = gochar_data.get("transit_details", [])
-        natal_lagna     = gochar_data.get("natal_lagna", {}).get("sign_np", "")
-
-        lines = [f"वर्तमान गोचर (नाताल लग्न: {natal_lagna}):"]
-        for t in transit_details:
-            lines.append(
-                f"- {t['planet_np']} → भाव {t['gochar_house']} ({t['sign_np']}): "
-                f"{t['effect']} — {t['description']}"
-            )
-
-        return "\n".join(lines)
-    except Exception:
-        return ""
-
-
-# ── Prompt builder ────────────────────────────────────────────────────────────
-
-def _period_label(period: str) -> str:
-    return {"daily": "दैनिक", "weekly": "साप्ताहिक",
-            "monthly": "मासिक", "yearly": "वार्षिक"}.get(period, period)
+    _cache_set(cache_key, data)
+    return data
 
 
-def build_prompt(rashi: str, english: str, period: str,
-                 bs_year: str, kundali_summary: str = "",
-                 gochar_summary: str = "") -> tuple:
+# ─── Normalise API response → prediction string ────────────────────────────────
+def extract_prediction(api_data: dict, period: str) -> str:
+    """
+    freehoroscopeapi.com returns different shapes per period.
+    Handles the common patterns gracefully.
+    """
+    # Try top-level keys first
+    for key in ("horoscope", "prediction", "description", "text", "data"):
+        val = api_data.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+        # data may be a nested dict
+        if isinstance(val, dict):
+            for inner in ("horoscope", "prediction", "description", "text"):
+                inner_val = val.get(inner)
+                if isinstance(inner_val, str) and inner_val.strip():
+                    return inner_val.strip()
 
-    personalized = bool(kundali_summary)
-    label        = _period_label(period)
-
-    context = ""
-    if kundali_summary:
-        context += f"\n\nव्यक्तिगत कुण्डली:\n{kundali_summary}"
-    if gochar_summary:
-        context += f"\n\n{gochar_summary}"
-
-    personal_note = ""
-    if personalized:
-        personal_note = "माथिको ग्रह स्थिति, दशा, लग्न, नक्षत्र र वर्तमान गोचरलाई आधार मानेर व्यक्तिगत फलादेश दिनुहोस्।\n\n"
-
-    if period == "yearly":
-        prompt = f"""तपाईं एक अनुभवी नेपाली ज्योतिषी हुनुहुन्छ। विक्रम संवत् {bs_year} को लागि {rashi} ({english}) राशिको {label} राशिफल लेख्नुहोस्।{context}
-
-{personal_note}JSON मात्र दिनुहोस्, अरू केही नलेख्नुहोस्:
-{{
-  "prediction": "३-४ वाक्यको समग्र वार्षिक सारांश",
-  "monthly_breakdown": {{
-    "वैशाख": "फलादेश","जेठ": "फलादेश","असार": "फलादेश","साउन": "फलादेश",
-    "भदौ": "फलादेश","असोज": "फलादेश","कार्तिक": "फलादेश","मङ्सिर": "फलादेश",
-    "पुस": "फलादेश","माघ": "फलादेश","फागुन": "फलादेश","चैत": "फलादेश"
-  }},
-  "career": "कार्यक्षेत्र २-३ वाक्य",
-  "love": "प्रेम सम्बन्ध २-३ वाक्य",
-  "health": "स्वास्थ्य २-३ वाक्य",
-  "education": "शिक्षा २-३ वाक्य",
-  "remedy": "शुभ उपाय",
-  "lucky_color": "शुभ रंग",
-  "lucky_number": "शुभ अंक",
-  "lucky_day": "शुभ बार",
-  "lucky_month": "शुभ महिना"
-}}"""
-        return prompt, 3000
-
-    elif period == "monthly":
-        prompt = f"""तपाईं एक अनुभवी नेपाली ज्योतिषी हुनुहुन्छ। {rashi} ({english}) राशिको यो महिनाको {label} राशिफल लेख्नुहोस्।{context}
-
-{personal_note}JSON मात्र दिनुहोस्:
-{{
-  "prediction": "मासिक सारांश ३-४ वाक्य",
-  "career": "कार्यक्षेत्र",
-  "love": "प्रेम सम्बन्ध",
-  "health": "स्वास्थ्य",
-  "lucky_color": "शुभ रंग",
-  "lucky_number": "शुभ अंक"
-}}"""
-        return prompt, 1200
-
-    elif period == "weekly":
-        prompt = f"""तपाईं एक अनुभवी नेपाली ज्योतिषी हुनुहुन्छ। {rashi} ({english}) राशिको यो हप्ताको {label} राशिफल लेख्नुहोस्।{context}
-
-{personal_note}JSON मात्र दिनुहोस्:
-{{
-  "prediction": "साप्ताहिक सारांश २-३ वाक्य",
-  "lucky_color": "शुभ रंग",
-  "lucky_number": "शुभ अंक"
-}}"""
-        return prompt, 800
-
-    else:  # daily
-        prompt = f"""तपाईं एक अनुभवी नेपाली ज्योतिषी हुनुहुन्छ। {rashi} ({english}) राशिको आजको {label} राशिफल लेख्नुहोस्।{context}
-
-{personal_note}JSON मात्र दिनुहोस्:
-{{
-  "prediction": "आजको फलादेश २-३ वाक्य",
-  "lucky_color": "शुभ रंग",
-  "lucky_number": "शुभ अंक"
-}}"""
-        return prompt, 700
+    # Fallback: stringify whatever we got
+    return json.dumps(api_data)
 
 
-# ── Cache key ─────────────────────────────────────────────────────────────────
-
-def make_cache_key(user_id: int, rashi: str, period: str, is_premium: bool) -> str:
-    if period == "yearly":
-        date_part = datetime.now().strftime("%Y-%m")
-    elif period == "weekly":
-        date_part = date.today().strftime("%Y-W%W")
-    else:
-        date_part = datetime.now().strftime("%Y-%m-%d")
-
-    if is_premium:
-        return f"prem_{user_id}_{period}_{date_part}"
-    else:
-        return f"free_{rashi}_{period}_{date_part}"
-
-
-# ── Response builder ──────────────────────────────────────────────────────────
-
-def build_response(rashi: str, period: str, ai_data: dict,
-                   bs_year: str, bs_date: str, is_premium: bool) -> dict:
+# ─── Build standardised response dict ──────────────────────────────────────────
+def build_response(rashi: str, api_data: dict, period: str) -> dict:
     info  = RASHI_INFO[rashi]
     today = datetime.now()
 
-    resp = {
-        "rashi": rashi, "english": info["english"], "symbol": info["symbol"],
-        "element": info["element"], "color": info["color"],
-        "period": period, "is_premium": is_premium,
+    return {
+        "rashi":   rashi,
+        "english": info["english"],
+        "symbol":  info["symbol"],
+        "element": info["element"],
+        "color":   info["color"],
+        "dates":   info["dates"],
+        "period":  period,
         "date": {
             "ad":  today.strftime("%Y-%m-%d"),
             "day": today.strftime("%A"),
-            "bs":  bs_date,
+            "bs":  get_bs_date(),
         },
-        "prediction": ai_data.get("prediction", ""),
+        "prediction": extract_prediction(api_data, period),
+        # freehoroscopeapi may or may not return lucky fields
         "lucky": {
-            "color":  ai_data.get("lucky_color", ""),
-            "number": ai_data.get("lucky_number", ""),
-            "day":    ai_data.get("lucky_day", ""),
-            "month":  ai_data.get("lucky_month", ""),
+            "color":  api_data.get("lucky_color",  api_data.get("data", {}).get("lucky_color",  "") if isinstance(api_data.get("data"), dict) else ""),
+            "number": api_data.get("lucky_number", api_data.get("data", {}).get("lucky_number", "") if isinstance(api_data.get("data"), dict) else ""),
+            "day":    api_data.get("lucky_day",    api_data.get("data", {}).get("lucky_day",    "") if isinstance(api_data.get("data"), dict) else ""),
+            "month":  api_data.get("lucky_month",  api_data.get("data", {}).get("lucky_month",  "") if isinstance(api_data.get("data"), dict) else ""),
         },
     }
 
-    if period == "yearly":
-        resp["monthly_breakdown"] = ai_data.get("monthly_breakdown", {})
-        resp["career"]    = ai_data.get("career", "")
-        resp["love"]      = ai_data.get("love", "")
-        resp["health"]    = ai_data.get("health", "")
-        resp["education"] = ai_data.get("education", "")
-        resp["remedy"]    = ai_data.get("remedy", "")
 
-    if period == "monthly":
-        resp["career"] = ai_data.get("career", "")
-        resp["love"]   = ai_data.get("love", "")
-        resp["health"] = ai_data.get("health", "")
+# ═══════════════════════════════════════════════════════════════════════════════
+#  ROUTES
+# ═══════════════════════════════════════════════════════════════════════════════
 
-    return resp
-
-
-# ── Main route ────────────────────────────────────────────────────────────────
-
+# ── GET /api/horoscope/?rashi=मेष&period=daily ─────────────────────────────────
 @horoscope_bp.route("/", methods=["GET"])
 @jwt_required()
 def get_horoscope():
-    user_id = get_current_user_id()
-    rashi   = request.args.get("rashi",  "मेष").strip()
-    period  = request.args.get("period", "daily").strip()
+    rashi    = request.args.get("rashi",    "मेष").strip()
+    period   = request.args.get("period",   "daily").strip().lower()
+    language = request.args.get("language", "nepali").strip()
 
-    if rashi not in RASHI_URL_MAP:
-        return jsonify({"error": f"'{rashi}' राशि फेला परेन।"}), 404
+    if rashi not in RASHI_ZODIAC_MAP:
+        valid = ", ".join(RASHI_ZODIAC_MAP.keys())
+        return jsonify({"error": f"'{rashi}' राशि फेला परेन। Valid: {valid}"}), 404
 
-    info    = RASHI_INFO[rashi]
-    today   = datetime.now()
-    bs_year = str(today.year + 57)
-    bs_date = f"वि.सं. {bs_year}"
-
-    premium_info = get_premium_status(user_id)
-    is_premium   = premium_info.get("premium", False)
-
-    cache_key = make_cache_key(user_id, rashi, period, is_premium)
-    ttl       = CACHE_TTL_YEARLY if period == "yearly" else CACHE_TTL
-
-    if cache_key in _cache:
-        cached_time, cached_data = _cache[cache_key]
-        if time.time() - cached_time < ttl:
-            return jsonify({"horoscope": cached_data}), 200
-
-    kundali_summary = ""
-    gochar_summary  = ""
-    if is_premium:
-        kundali_summary = build_kundali_summary(user_id)
-        gochar_summary  = build_gochar_summary(user_id)
-
-    prompt, max_tokens = build_prompt(
-        rashi, info["english"], period, bs_year,
-        kundali_summary, gochar_summary
-    )
+    if period not in VALID_PERIODS:
+        return jsonify({"error": f"period '{period}' मान्य छैन। Valid: {', '.join(VALID_PERIODS)}"}), 400
 
     try:
-        raw     = call_groq(prompt, max_tokens)
-        ai_data = parse_json(raw)
+        zodiac_en = RASHI_ZODIAC_MAP[rashi]
+        api_data  = fetch_free_horoscope(zodiac_en, period)
+        horoscope = build_response(rashi, api_data, period)
+        return jsonify({"horoscope": horoscope}), 200
+
     except Exception as e:
-        return jsonify({"error": f"राशिफल generate गर्न सकिएन: {str(e)}"}), 503
-
-    if "error" in ai_data and not ai_data.get("prediction"):
-        return jsonify({"error": "राशिफल generate गर्न सकिएन।"}), 503
-
-    horoscope = build_response(rashi, period, ai_data, bs_year, bs_date, is_premium)
-    _cache[cache_key] = (time.time(), horoscope)
-
-    return jsonify({"horoscope": horoscope}), 200
+        return jsonify({"error": f"राशिफल ल्याउन सकिएन: {str(e)}"}), 503
 
 
+# ── GET /api/horoscope/all?period=weekly  →  सबै 12 ओटै ───────────────────────
 @horoscope_bp.route("/all", methods=["GET"])
 @jwt_required()
 def get_all_horoscope():
-    today   = datetime.now()
-    bs_year = str(today.year + 57)
-    bs_date = f"वि.सं. {bs_year}"
-    result  = {}
+    period   = request.args.get("period",   "daily").strip().lower()
+    language = request.args.get("language", "nepali").strip()
 
-    for rashi, info in RASHI_INFO.items():
-        cache_key = make_cache_key(0, rashi, "daily", False)
-        if cache_key in _cache:
-            cached_time, cached_data = _cache[cache_key]
-            if time.time() - cached_time < CACHE_TTL:
-                result[rashi] = cached_data
-                continue
+    if period not in VALID_PERIODS:
+        return jsonify({"error": f"period '{period}' मान्य छैन। Valid: {', '.join(VALID_PERIODS)}"}), 400
+
+    today  = datetime.now()
+    result = {}
+
+    for rashi in RASHI_ZODIAC_MAP:
+        zodiac_en = RASHI_ZODIAC_MAP[rashi]
+        info      = RASHI_INFO[rashi]
 
         try:
-            prompt, max_tokens = build_prompt(rashi, info["english"], "daily", bs_year)
-            raw       = call_groq(prompt, max_tokens)
-            ai_data   = parse_json(raw)
-            horoscope = build_response(rashi, "daily", ai_data, bs_year, bs_date, False)
-            _cache[cache_key] = (time.time(), horoscope)
-            result[rashi] = horoscope
-            time.sleep(2)  # rate limit avoid
-        except Exception:
-            result[rashi] = {"rashi": rashi, "prediction": "", "error": "fetch failed"}
+            api_data = fetch_free_horoscope(zodiac_en, period)
+            entry    = build_response(rashi, api_data, period)
+            result[rashi] = entry
+
+        except Exception as e:
+            result[rashi] = {
+                "rashi":      rashi,
+                "english":    info["english"],
+                "symbol":     info["symbol"],
+                "element":    info["element"],
+                "color":      info["color"],
+                "dates":      info["dates"],
+                "period":     period,
+                "prediction": "",
+                "lucky":      {"color": "", "number": "", "day": "", "month": ""},
+                "error":      f"fetch failed: {str(e)}",
+            }
+
+        time.sleep(0.2)   # be polite to the free API
 
     return jsonify({
         "date":       today.strftime("%Y-%m-%d"),
+        "period":     period,
+        "total":      len(result),
         "horoscopes": result,
     }), 200
+
+
+# ── GET /api/horoscope/list  →  static metadata only ──────────────────────────
+@horoscope_bp.route("/list", methods=["GET"])
+@jwt_required()
+def get_rashi_list():
+    data = [
+        {
+            "rashi":   rashi,
+            "english": info["english"],
+            "symbol":  info["symbol"],
+            "element": info["element"],
+            "color":   info["color"],
+            "dates":   info["dates"],
+        }
+        for rashi, info in RASHI_INFO.items()
+    ]
+    return jsonify({"rashis": data, "total": len(data)}), 200
+
+
+# ─── Error handlers ─────────────────────────────────────────────────────────────
+@horoscope_bp.errorhandler(404)
+def not_found(e):
+    return jsonify({"error": "Endpoint not found"}), 404
+
+@horoscope_bp.errorhandler(500)
+def server_error(e):
+    return jsonify({"error": "Internal server error"}), 500
