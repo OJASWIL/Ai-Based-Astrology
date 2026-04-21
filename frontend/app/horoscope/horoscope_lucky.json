@@ -1,0 +1,62 @@
+{
+  "मेष": {
+    "lucky_number": "1, 9",
+    "lucky_color": "रातो",
+    "lucky_color_en": "Red"
+  },
+  "वृष": {
+    "lucky_number": "2, 6",
+ "lucky_color": "गुलाबी",
+    "lucky_color_en": "Pink"
+  },
+  "मिथुन": {
+    "lucky_number": "3, 5",
+    "lucky_color": "हरियो",
+    "lucky_color_en": "Green"
+  },
+  "कर्कट": {
+    "lucky_number": "2, 7",
+    "lucky_color": "चाँदी",
+    "lucky_color_en": "Silver"
+  },
+  "सिंह": {
+    "lucky_number": "1, 4",
+    "lucky_color": "सुनौलो",
+    "lucky_color_en": "Gold"
+  },
+  "कन्या": {
+    "lucky_number": "5, 8",
+    "lucky_color": "हरियो",
+    "lucky_color_en": "Green"
+  },
+  "तुला": {
+    "lucky_number": "4, 6",
+    "lucky_color": "गुलाबी",
+    "lucky_color_en": "Pink"
+  },
+  "वृश्चिक": {
+    "lucky_number": "3, 9",
+    "lucky_color": "रातो",
+    "lucky_color_en": "Deep Red"
+  },
+  "धनु": {
+    "lucky_number": "5, 7",
+    "lucky_color": "बैजनी",
+    "lucky_color_en": "Purple"
+  },
+  "मकर": {
+    "lucky_number": "4, 8",
+     "lucky_color": "नीलो",
+    "lucky_color_en": "Blue"
+  },
+  "कुम्भ": {
+    "lucky_number": "2, 7",
+    "lucky_color": "नीलो",
+    "lucky_color_en": "Blue"
+  },
+  "मीन": {
+    "lucky_number": "6, 9",
+    "lucky_color": "हरियो",
+    "lucky_color_en": "Sea Green"
+  }
+}
